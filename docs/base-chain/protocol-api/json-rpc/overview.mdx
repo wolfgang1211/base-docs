@@ -1,6 +1,6 @@
 ---
 title: 'Base RPC Overview'
-sidebarTitle: 'Overview'
+sidebarTitle: 'RPC Overview'
 description: 'Complete reference for all JSON-RPC and Flashblocks methods available on Base nodes.'
 ---
 
@@ -171,3 +171,28 @@ All requests are HTTP POST with `Content-Type: application/json`.
 | `"finalized"` | Latest finalized block | Latest finalized block |
 | `"earliest"` | Genesis block | Genesis block |
 | `"0x<n>"` | Specific block by number | Specific block by number |
+
+## Rollup Node API
+
+The rollup node exposes one additional RPC method not part of the standard Ethereum JSON-RPC API. It is used internally by the fault proof system to retrieve L2 output roots.
+
+### `optimism_outputAtBlock`
+
+Returns an output root and associated metadata for a given L2 block number. The output root is a 32-byte commitment used by the fault proof proposer to anchor disputed L2 state on L1.
+
+**Parameters**
+
+| Name | Type | Description |
+| :--- | :--- | :--- |
+| `blockNumber` | `QUANTITY`, 64 bits | L2 integer block number |
+
+**Returns**
+
+| Name | Type | Description |
+| :--- | :--- | :--- |
+| `version` | `DATA`, 32 Bytes | Output root version number, beginning with `0` |
+| `outputRoot` | `DATA`, 32 Bytes | The output root |
+| `blockRef` | `Object` | L2 block reference — hash, number, parentHash, timestamp, l1origin, sequenceNumber |
+| `withdrawalStorageRoot` | `DATA`, 32 Bytes | Storage root of the `L2ToL1MessagePasser` contract |
+| `stateRoot` | `DATA`, 32 Bytes | The state root |
+| `syncStatus` | `Object` | Snapshot of the rollup driver sync state across L1 and L2 heads |
