@@ -9,16 +9,21 @@ description: "Overview of the Azul hardfork, introducing Osaka EVM support, a si
 Only `base-consensus` and `base-reth-node` will support the Base Azul hardfork. If you are running `op-node`, `op-geth` or any other clients you will need to update prior to the activation date.
 </Warning>
 
-- Add Osaka Support
-- Simplify Flashblocks Websocket Format
-- Enable a new multi-proof system for faster withdrawals and a path to stronger decentralization
-- Only Base Node Reth / Base Consensus will be supported
+- **Osaka EVM support** — Base gains all EIPs included in Ethereum's Osaka hardfork
+- **Fast finality** — Withdrawals to L1 drop from 7 days to 1 day when both TEE and ZK proofs back the same proposal, improving capital efficiency for bridges, exchanges, and payment processors
+- **Multi-proof system** — A new TEE + ZK proof architecture replaces the optimistic fault-proof model, reducing economic attack surface and laying the groundwork for Stage 2 decentralization
+
+<Warning>
+**Breaking changes for integrators:**
+- The `secp256r1` precompile (`p256Verify` at `0x100`) gas cost doubles from 3,450 to 6,900. Update any hardcoded gas estimates for passkey or Smart Wallet operations.
+- The Flashblocks WebSocket `FlashblocksMetadata` payload removes the `new_account_balances` and `receipts` fields. Any integration consuming these fields must be updated before activation.
+</Warning>
 
 ## Activation Timestamps
 
 | Network   | Activation timestamp                   |
 | --------- | -------------------------------------- |
-| `mainnet` | `1778695200` (2026-05-13 18:00:00 UTC) |
+| `mainnet` | `1779386400` (2026-05-21 18:00:00 UTC) |
 | `sepolia` | `1776708000` (2026-04-20 18:00:00 UTC) |
 
 ## Execution Layer

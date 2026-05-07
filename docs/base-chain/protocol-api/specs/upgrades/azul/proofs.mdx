@@ -13,6 +13,10 @@ later back the same proposal or dispute an invalid one. `AggregateVerifier` dele
 to dedicated verifier contracts, while a prover registrar keeps the onchain registry of accepted
 TEE signer identities up to date.
 
+<Note>
+**Withdrawal finality improves significantly with Azul.** When both TEE and ZK proofs back the same proposal, withdrawals to L1 settle in 1 day instead of 7. This is the expected path for most proposals and directly benefits bridges, payment processors, and market makers that depend on timely L1 capital access.
+</Note>
+
 ## Why Change the Proof System
 
 Base's current [fault-proof system](/base-chain/specs/protocol/fault-proof) is optimistic and interactive: a

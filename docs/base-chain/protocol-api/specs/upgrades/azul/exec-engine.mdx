@@ -44,6 +44,10 @@ Base already has the `p256Verify` precompile at the same address (added in Fjord
 From Azul, the gas cost increases to 6,900 to match the L1 gas cost specified in EIP-7951, maintaining
 strict equivalence with L1 precompile pricing.
 
+<Warning>
+This is a breaking change for any application that hardcodes a gas limit of 3,450 for `p256Verify` calls, including passkey-based authentication flows and Smart Wallet operations. Update your gas estimates to at least 6,900 before the Azul activation date.
+</Warning>
+
 ## Networking Changes
 
 ### eth/69
@@ -51,11 +55,17 @@ strict equivalence with L1 precompile pricing.
 [EIP-7642](https://eips.ethereum.org/EIPS/eip-7642) updates the Ethereum wire protocol to version 69,
 removing legacy fields from the `Status` message and simplifying the handshake.
 
-### Remove Account Balances & Receipts
+## Application Changes
+
+### Flashblocks WebSocket: Remove Account Balances & Receipts
 
 The `FlashblocksMetadata` payload transmitted over the Flashblocks WebSocket is simplified in Azul.
 The `new_account_balances` and `receipts` fields are removed. The `access_list` field remains but
 will not be populated in Azul.
+
+<Warning>
+This is a breaking change for any integration that reads `new_account_balances` or `receipts` from the Flashblocks WebSocket feed. These fields will no longer be present in the payload after activation. Update your integration to source balance and receipt data from standard JSON-RPC methods instead.
+</Warning>
 
 **Before:**
 

@@ -3,45 +3,45 @@ title: "Derivation"
 description: "Specification of the L2 chain derivation pipeline, describing how L2 blocks are deterministically derived from L1 data and sequencer batches."
 ---
 
-[g-derivation]: ../../reference/glossary#l2-chain-derivation
-[g-payload-attr]: ../../reference/glossary#payload-attributes
-[g-block]: ../../reference/glossary#block
-[g-exec-engine]: ../../reference/glossary#execution-engine
-[g-reorg]: ../../reference/glossary#chain-re-organization
-[g-receipts]: ../../reference/glossary#receipt
-[g-deposit-contract]: ../../reference/glossary#deposit-contract
-[g-deposited]: ../../reference/glossary#deposited-transaction
-[g-l1-attr-deposit]: ../../reference/glossary#l1-attributes-deposited-transaction
-[g-l1-origin]: ../../reference/glossary#l1-origin
-[g-user-deposited]: ../../reference/glossary#user-deposited-transaction
-[g-deposits]: ../../reference/glossary#deposits
-[g-sequencing]: ../../reference/glossary#sequencing
-[g-sequencer]: ../../reference/glossary#sequencer
-[g-sequencing-epoch]: ../../reference/glossary#sequencing-epoch
-[g-sequencing-window]: ../../reference/glossary#sequencing-window
-[g-sequencer-batch]: ../../reference/glossary#sequencer-batch
-[g-l2-genesis]: ../../reference/glossary#l2-genesis-block
-[g-l2-chain-inception]: ../../reference/glossary#l2-chain-inception
-[g-l2-genesis-block]: ../../reference/glossary#l2-genesis-block
-[g-batcher-transaction]: ../../reference/glossary#batcher-transaction
-[g-avail-provider]: ../../reference/glossary#data-availability-provider
-[g-batcher]: ../../reference/glossary#batcher
-[g-l2-output]: ../../reference/glossary#l2-output-root
-[g-fault-proof]: ../../reference/glossary#fault-proof
-[g-channel]: ../../reference/glossary#channel
-[g-channel-frame]: ../../reference/glossary#channel-frame
-[g-rollup-node]: ../../reference/glossary#rollup-node
-[g-block-time]: ../../reference/glossary#block-time
-[g-time-slot]: ../../reference/glossary#time-slot
-[g-consolidation]: ../../reference/glossary#unsafe-block-consolidation
-[g-safe-l2-head]: ../../reference/glossary#safe-l2-head
-[g-safe-l2-block]: ../../reference/glossary#safe-l2-block
-[g-unsafe-l2-head]: ../../reference/glossary#unsafe-l2-head
-[g-unsafe-l2-block]: ../../reference/glossary#unsafe-l2-block
-[g-unsafe-sync]: ../../reference/glossary#unsafe-sync
-[g-deposit-tx-type]: ../../reference/glossary#deposited-transaction-type
-[g-finalized-l2-head]: ../../reference/glossary#finalized-l2-head
-[g-system-config]: ../../reference/glossary#system-configuration
+[g-derivation]: ../../protocol-api/specs/reference/glossary#l2-chain-derivation
+[g-payload-attr]: ../../protocol-api/specs/reference/glossary#payload-attributes
+[g-block]: ../../protocol-api/specs/reference/glossary#block
+[g-exec-engine]: ../../protocol-api/specs/reference/glossary#execution-engine
+[g-reorg]: ../../protocol-api/specs/reference/glossary#chain-re-organization
+[g-receipts]: ../../protocol-api/specs/reference/glossary#receipt
+[g-deposit-contract]: ../../protocol-api/specs/reference/glossary#deposit-contract
+[g-deposited]: ../../protocol-api/specs/reference/glossary#deposited-transaction
+[g-l1-attr-deposit]: ../../protocol-api/specs/reference/glossary#l1-attributes-deposited-transaction
+[g-l1-origin]: ../../protocol-api/specs/reference/glossary#l1-origin
+[g-user-deposited]: ../../protocol-api/specs/reference/glossary#user-deposited-transaction
+[g-deposits]: ../../protocol-api/specs/reference/glossary#deposits
+[g-sequencing]: ../../protocol-api/specs/reference/glossary#sequencing
+[g-sequencer]: ../../protocol-api/specs/reference/glossary#sequencer
+[g-sequencing-epoch]: ../../protocol-api/specs/reference/glossary#sequencing-epoch
+[g-sequencing-window]: ../../protocol-api/specs/reference/glossary#sequencing-window
+[g-sequencer-batch]: ../../protocol-api/specs/reference/glossary#sequencer-batch
+[g-l2-genesis]: ../../protocol-api/specs/reference/glossary#l2-genesis-block
+[g-l2-chain-inception]: ../../protocol-api/specs/reference/glossary#l2-chain-inception
+[g-l2-genesis-block]: ../../protocol-api/specs/reference/glossary#l2-genesis-block
+[g-batcher-transaction]: ../../protocol-api/specs/reference/glossary#batcher-transaction
+[g-avail-provider]: ../../protocol-api/specs/reference/glossary#data-availability-provider
+[g-batcher]: ../../protocol-api/specs/reference/glossary#batcher
+[g-l2-output]: ../../protocol-api/specs/reference/glossary#l2-output-root
+[g-fault-proof]: ../../protocol-api/specs/reference/glossary#fault-proof
+[g-channel]: ../../protocol-api/specs/reference/glossary#channel
+[g-channel-frame]: ../../protocol-api/specs/reference/glossary#channel-frame
+[g-rollup-node]: ../../protocol-api/specs/reference/glossary#rollup-node
+[g-block-time]: ../../protocol-api/specs/reference/glossary#block-time
+[g-time-slot]: ../../protocol-api/specs/reference/glossary#time-slot
+[g-consolidation]: ../../protocol-api/specs/reference/glossary#unsafe-block-consolidation
+[g-safe-l2-head]: ../../protocol-api/specs/reference/glossary#safe-l2-head
+[g-safe-l2-block]: ../../protocol-api/specs/reference/glossary#safe-l2-block
+[g-unsafe-l2-head]: ../../protocol-api/specs/reference/glossary#unsafe-l2-head
+[g-unsafe-l2-block]: ../../protocol-api/specs/reference/glossary#unsafe-l2-block
+[g-unsafe-sync]: ../../protocol-api/specs/reference/glossary#unsafe-sync
+[g-deposit-tx-type]: ../../protocol-api/specs/reference/glossary#deposited-transaction-type
+[g-finalized-l2-head]: ../../protocol-api/specs/reference/glossary#finalized-l2-head
+[g-system-config]: ../../protocol-api/specs/reference/glossary#system-configuration
 
 ## Overview
 
@@ -135,10 +135,10 @@ protocol upgrades.
 
 | Parameter | Bedrock (default) value | Latest (default) value | Changes | Notes |
 | --------- | ----------------------- | ---------------------- | ------- | ----- |
-| `max_sequencer_drift` | 600 | 1800 | [Fjord](../../upgrades/fjord/derivation#constant-maximum-sequencer-drift) | Changed from a chain parameter to a constant with Fjord. |
-| `MAX_RLP_BYTES_PER_CHANNEL` | 10,000,000 | 100,000,000 | [Fjord](../../upgrades/fjord/derivation#increasing-max_rlp_bytes_per_channel-and-max_channel_bank_size) | Constant increased with Fjord. |
-| `MAX_CHANNEL_BANK_SIZE` | 100,000,000 | 1,000,000,000 | [Fjord](../../upgrades/fjord/derivation#increasing-max_rlp_bytes_per_channel-and-max_channel_bank_size) | Constant increased with Fjord. |
-| `MAX_SPAN_BATCH_ELEMENT_COUNT` | 10,000,000 | 10,000,000 | Effectively introduced in [Fjord](../../upgrades/fjord/derivation#increasing-max_rlp_bytes_per_channel-and-max_channel_bank_size)| Number of elements |
+| `max_sequencer_drift` | 600 | 1800 | [Fjord](../../protocol-api/specs/upgrades/fjord/derivation#constant-maximum-sequencer-drift) | Changed from a chain parameter to a constant with Fjord. |
+| `MAX_RLP_BYTES_PER_CHANNEL` | 10,000,000 | 100,000,000 | [Fjord](../../protocol-api/specs/upgrades/fjord/derivation#increasing-max_rlp_bytes_per_channel-and-max_channel_bank_size) | Constant increased with Fjord. |
+| `MAX_CHANNEL_BANK_SIZE` | 100,000,000 | 1,000,000,000 | [Fjord](../../protocol-api/specs/upgrades/fjord/derivation#increasing-max_rlp_bytes_per_channel-and-max_channel_bank_size) | Constant increased with Fjord. |
+| `MAX_SPAN_BATCH_ELEMENT_COUNT` | 10,000,000 | 10,000,000 | Effectively introduced in [Fjord](../../protocol-api/specs/upgrades/fjord/derivation#increasing-max_rlp_bytes_per_channel-and-max_channel_bank_size)| Number of elements |
 
 ## System Configuration
 
@@ -369,7 +369,7 @@ where zlib_compress is the ZLIB algorithm (as specified in [RFC-1950][rfc1950]) 
 [rfc1950]: https://www.rfc-editor.org/rfc/rfc1950.html
 
 The Fjord upgrade introduces an additional [versioned channel encoding
-format](../../upgrades/fjord/derivation#brotli-channel-compression) to support alternate compression
+format](../../protocol-api/specs/upgrades/fjord/derivation#brotli-channel-compression) to support alternate compression
 algorithms.
 
 When decompressing a channel, we limit the amount of decompressed data to `MAX_RLP_BYTES_PER_CHANNEL` (defined in the
@@ -414,7 +414,7 @@ where:
 
 The Delta upgrade introduced an additional batch type, [span batches][span-batches].
 
-[span-batches]: ../../upgrades/delta/span-batches
+[span-batches]: ../../protocol-api/specs/upgrades/delta/span-batches
 
 Unknown versions make the batch invalid (it must be ignored by the rollup node), as do malformed contents.
 
@@ -657,7 +657,7 @@ Rules, in validation order:
   - any transaction that is empty (zero length byte string)
   - any [deposited transactions][g-deposit-tx-type] (identified by the transaction type prefix byte)
   - any transaction of a future type > 2 (note that
-    [Isthmus adds support](../../upgrades/isthmus/derivation#activation)
+    [Isthmus adds support](../../protocol-api/specs/upgrades/isthmus/derivation#activation)
     for `SetCode` transactions of type 4)
 
 If no batch can be `accept`-ed, and the stage has completed buffering of all batches that can fully be read from the L1
@@ -965,7 +965,7 @@ This is however completely unrelated to the outputs posted on L1, which require 
 zk-proof to finalize. Optimistic-rollup outputs like withdrawals on L1 are only labeled "finalized" after passing a week
 without dispute (fault proof challenge window), a name-collision with the proof-of-stake finalization.
 
-[merge]: https://ethereum.org/en/upgrades/merge/
+[merge]: https://ethereum.o../../protocol-api/specs/upgrades/merge/
 [l1-finality]: https://ethereum.org/en/developers/docs/consensus-mechanisms/pos/#finality
 
 ---

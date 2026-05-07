@@ -1,16 +1,16 @@
 ---
-title: "Specification"
+title: "Rollup Node"
 description: "Specification of the Base rollup node, describing its components and role in L2 block derivation and consensus."
 ---
 
-[g-rollup-node]: ../../reference/glossary#rollup-node
-[g-derivation]: ../../reference/glossary#L2-chain-derivation
-[g-payload-attr]: ../../reference/glossary#payload-attributes
-[g-block]: ../../reference/glossary#block
-[g-exec-engine]: ../../reference/glossary#execution-engine
-[g-reorg]: ../../reference/glossary#re-organization
-[g-rollup-driver]: ../../reference/glossary#rollup-driver
-[g-receipts]: ../../reference/glossary#receipt
+[g-rollup-node]: ../../protocol-api/specs/reference/glossary#rollup-node
+[g-derivation]: ../../protocol-api/specs/reference/glossary#L2-chain-derivation
+[g-payload-attr]: ../../protocol-api/specs/reference/glossary#payload-attributes
+[g-block]: ../../protocol-api/specs/reference/glossary#block
+[g-exec-engine]: ../../protocol-api/specs/reference/glossary#execution-engine
+[g-reorg]: ../../protocol-api/specs/reference/glossary#re-organization
+[g-rollup-driver]: ../../protocol-api/specs/reference/glossary#rollup-driver
+[g-receipts]: ../../protocol-api/specs/reference/glossary#receipt
 
 ## Overview
 
@@ -55,7 +55,7 @@ the Protocol Versions contract on L1.
 
 This can be implemented through polling in the [Driver](#driver) loop.
 After polling the Protocol Version, the rollup node SHOULD communicate it with the execution-engine through an
-[`engine_signalSuperchainV1`](../execution/index#enginesignalsuperchainv1) call.
+[`engine_signalSuperchainV1`](../../protocol-api/specs/protocol/execution/index#enginesignalsuperchainv1) call.
 
 The rollup node SHOULD warn the user when the recommended version is newer than
 the current version supported by the rollup node.

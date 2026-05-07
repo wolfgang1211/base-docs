@@ -119,10 +119,10 @@
                 "pages": [
                   "base-chain/network-information/bridges/overview",
                   "base-chain/network-information/bridges/solana-bridge",
-                  "base-chain/protocol-api/specs/protocol/bridging/bridges",
-                  "base-chain/protocol-api/specs/protocol/bridging/deposits",
-                  "base-chain/protocol-api/specs/protocol/bridging/messengers",
-                  "base-chain/protocol-api/specs/protocol/bridging/withdrawals"
+                  "base-chain/network-information/bridges/bridges",
+                  "base-chain/network-information/bridges/deposits",
+                  "base-chain/network-information/bridges/messengers",
+                  "base-chain/network-information/bridges/withdrawals"
                 ]
               },
               {
@@ -162,10 +162,10 @@
                   "base-chain/infrastructure/flashblocks/faq"
                 ]
               },
-              "base-chain/protocol-api/specs/protocol/batcher",
-              "base-chain/protocol-api/specs/protocol/consensus/index",
-              "base-chain/protocol-api/specs/protocol/consensus/derivation",
-              "base-chain/protocol-api/specs/protocol/consensus/p2p"
+              "base-chain/infrastructure/batcher",
+              "base-chain/infrastructure/consensus/index",
+              "base-chain/infrastructure/consensus/derivation",
+              "base-chain/infrastructure/consensus/p2p"
             ]
           },
           {
@@ -778,6 +778,38 @@
     ]
   },
   "redirects": [
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/batcher",
+      "destination": "/base-chain/infrastructure/batcher"
+    },
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/consensus/index",
+      "destination": "/base-chain/infrastructure/consensus/index"
+    },
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/consensus/derivation",
+      "destination": "/base-chain/infrastructure/consensus/derivation"
+    },
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/consensus/p2p",
+      "destination": "/base-chain/infrastructure/consensus/p2p"
+    },
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/bridging/bridges",
+      "destination": "/base-chain/network-information/bridges/bridges"
+    },
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/bridging/deposits",
+      "destination": "/base-chain/network-information/bridges/deposits"
+    },
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/bridging/messengers",
+      "destination": "/base-chain/network-information/bridges/messengers"
+    },
+    {
+      "source": "/base-chain/protocol-api/specs/protocol/bridging/withdrawals",
+      "destination": "/base-chain/network-information/bridges/withdrawals"
+    },
     {
       "source": "/base-chain/reference/json-rpc-api",
       "destination": "/base-chain/protocol-api/json-rpc/overview"
