@@ -44,6 +44,10 @@ Ensure the following ports are accessible (not blocked by firewall) for peer dis
 Port `9222` is critical for Reth peer discovery. If this port is blocked, your node may have difficulty finding peers and syncing.
 </Note>
 
+#### Base Peer Discovery (`basev0`)
+
+Starting with v0.8.0, `base-reth-node` enables the Base-specific `basev0` discv5 peer identity by default via `--rollup.discovery.v5.base=true`. This significantly improves peer discovery on the Base network and resolves the low peer-count issues many operators experienced on earlier versions.
+
 ### Docker
 
 This tutorial assumes you are familiar with [Docker](https://www.docker.com/) and have it running on your machine.

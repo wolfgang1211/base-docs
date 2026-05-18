@@ -152,9 +152,13 @@ If you use [base/node](https://github.com/base/node), most variables are already
 
 ### Notable base-consensus Options (v0.8.0+)
 
-**`BASE_NODE_RPC_CONCURRENCY`** — Sets the maximum number of RPC queries processed in parallel. Increase this on nodes serving high request volumes to improve throughput. The default is conservative; tune it based on your available CPU and memory.
+**`BASE_NODE_RPC_CONCURRENCY`** — Sets the maximum number of RPC queries processed in parallel (default: `1024`). Increase this on nodes serving high request volumes to improve throughput. Tune it based on your available CPU and memory.
 
 **`BASE_NODE_L2_ENGINE_RPC`** — Now accepts WebSocket schemes (`ws://` or `wss://`) in addition to HTTP for the Engine API connection. Use a WebSocket scheme when your execution client is configured to serve the Engine API over WebSocket.
+
+**`BASE_NODE_DISCOVERY_V5_BASE`** — Enables the Base-specific `basev0` discv5 peer identity, which is on by default (`true`) in [v0.8.0+](https://github.com/base/base/releases/tag/v0.8.0). This significantly improves peer discovery and resolves the low peer-count issues seen on earlier versions. To disable it for legacy compatibility, set `BASE_NODE_DISCOVERY_V5_BASE=false`.
+
+**`op_syncStatus` response** — The `cross_unsafe_l2` field has been removed from the `op_syncStatus` (and `optimism_syncStatus`) RPC response. The `local_safe_l2` field remains. If you have any scripts or monitoring that parse `cross_unsafe_l2`, update them to remove references to that field.
 
 ## FAQ
 
