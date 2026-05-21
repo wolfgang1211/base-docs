@@ -36,7 +36,7 @@ Each subscription emits **one item per WebSocket message**. Events arrive approx
 
 ## Example
 
-<CodeGroup>
+<RequestExample>
 ```json Subscribe
 {"jsonrpc": "2.0", "id": 1, "method": "eth_subscribe", "params": ["newFlashblockTransactions"]}
 ```
@@ -44,8 +44,10 @@ Each subscription emits **one item per WebSocket message**. Events arrive approx
 ```json Subscribe (full data)
 {"jsonrpc": "2.0", "id": 1, "method": "eth_subscribe", "params": ["newFlashblockTransactions", true]}
 ```
+</RequestExample>
 
+<ResponseExample>
 ```json Subscription ID Response
 {"jsonrpc": "2.0", "id": 1, "result": "0x1887ec8b9589ccad00000000000532da"}
 ```
-</CodeGroup>
+</ResponseExample>
