@@ -1,0 +1,83 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  description: string;
+  pageTitle?: string;
+  publishedAt?: Date;
+  updatedAt?: Date;
+  author?: string;
+  role?: string;
+  tags?: string[];
+}
+
+const {
+  description,
+  pageTitle,
+  publishedAt,
+  updatedAt,
+  author,
+  role,
+  tags = [],
+} = Astro.props;
+
+const siteName = 'Base Engineering Blog';
+const title = pageTitle ? `${pageTitle} · ${siteName}` : siteName;
+const currentPath = Astro.url.pathname;
+const canonical = Astro.site ? new URL(currentPath, Astro.site).toString() : undefined;
+const withBase = (path: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+
+const formatDate = (value?: Date) =>
+  value
+    ? new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(value)
+    : null;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="article" />
+    {canonical && <link rel="canonical" href={canonical} />}
+  </head>
+  <body>
+    <header class="site-shell">
+      <nav class="site-nav">
+        <a class="site-mark" href={withBase('/')}>
+          <span class="site-mark__badge">B</span>
+          <span>{siteName}</span>
+        </a>
+
+        <div class="site-nav__links">
+          <a class="site-pill" href={withBase('/')}>Blog</a>
+          <a class="site-pill" href="https://docs.base.org">Base docs</a>
+        </div>
+      </nav>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="site-shell site-footer">
+      <div>Built for deep engineering posts, runnable ideas, and interactive explainers.</div>
+      {(author || publishedAt) && (
+        <div class="meta-row" style="margin-top: 10px;">
+          {author && <span>By {author}{role ? ` · ${role}` : ''}</span>}
+          {publishedAt && <span>Published {formatDate(publishedAt)}</span>}
+          {updatedAt && <span>Updated {formatDate(updatedAt)}</span>}
+          {tags.length > 0 && tags.map((tag) => <span class="tag">{tag}</span>)}
+        </div>
+      )}
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,62 @@
+---
+import { getCollection, render } from 'astro:content';
+import BaseBlogLayout from '../../layouts/BaseBlogLayout.astro';
+
+export async function getStaticPaths() {
+  const posts = await getCollection('posts');
+
+  return posts
+    .filter((post) => !post.data.draft)
+    .map((post) => ({
+      params: { slug: post.id },
+      props: { post },
+    }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const withBase = (path: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+---
+
+<BaseBlogLayout
+  pageTitle={post.data.title}
+  description={post.data.description}
+  publishedAt={post.data.publishedAt}
+  updatedAt={post.data.updatedAt}
+  author={post.data.author}
+  role={post.data.role}
+  tags={post.data.tags}
+>
+  <article class="article-shell">
+    <header class="article-hero">
+      <h1>{post.data.title}</h1>
+      <p class="lede">{post.data.description}</p>
+
+      <div class="article-meta">
+        <span>{post.data.author}{post.data.role ? ` · ${post.data.role}` : ''}</span>
+        <span>•</span>
+        <span>
+          {new Intl.DateTimeFormat('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+          }).format(post.data.publishedAt)}
+        </span>
+      </div>
+
+      {post.data.tags.length > 0 && (
+        <div class="tag-row" style="margin-top: 16px;">
+          {post.data.tags.map((tag) => <span class="tag">{tag}</span>)}
+        </div>
+      )}
+    </header>
+
+    <div class="article-body">
+      <Content />
+    </div>
+
+    <footer class="article-footer">
+      <a class="site-pill" href={withBase('/')}>Back to all posts</a>
+    </footer>
+  </article>
+</BaseBlogLayout>

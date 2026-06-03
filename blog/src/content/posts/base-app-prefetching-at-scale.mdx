@@ -1,0 +1,398 @@
+---
+title: "Building The New Base App: Prefetching at Scale"
+description: "TL;DR\nWe reduced navigation blocking time by 80-100% and eliminated loading shimmers entirely. Here's how."
+publishedAt: 2026-01-21
+author: "Base Engineering Team"
+tags:
+  - applications
+draft: false
+---
+
+import ImportedHtml from '../../components/ImportedHtml.astro';
+export const html = String.raw`<h2 id="h-background-the-challenge" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Background: The challenge</h2><p>A year ago, we made a bold decision: evolve Coinbase Wallet into the <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://join.base.app/"><u>Base App</u></a>, an onchain everything app that brings social, trading, payments, app discovery, and earning into one place. Our goal was to build a consumer-grade experience that rivals the best social apps, while gracefully handling onchain challenges like transaction confirmations and real-time blockchain data syncing. But we also knew it was critical to balance security and quality with speed and scale. To do this, we carefully considered how to handle loading states.</p><p>We started with loading skeletons (or shimmer UIs). They serve a single purpose: to keep users engaged while data is being fetched. Instead of staring at a blank screen or a spinning loader, users see a visual placeholder that mimics the final layout of the content.</p><p>But loading skeletons are ultimately an elegant <strong>band-aid</strong>, and we set out to do better. They help mask slow APIs or heavy computations by giving users something to look at while they wait. While they improve the overall user experience, they don't address the root cause of slow performance.</p><p>As the content is being fetched, the skeleton itself must be rendered first, followed by the actual content once it’s loaded. This double render cycle can affect performance, particularly on less powerful devices. The result? An additional delay that might ironically make the app feel slower, especially in low network conditions or on resource-constrained devices.</p><p>One could also argue the repeated, jumpy flash of gray shimmers isn’t as elegant as we thought. See our current Profile loading timeline:</p><figure float="none" data-type="figure" class="img-center" style="max-width: null;"><img src="https://storage.googleapis.com/papyrus_images/e9f4db2a4217bf7154be804c07a78130fa9b6c72b470c755e6579aafc334491a.png" blurdataurl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAOCAIAAADBvonlAAAACXBIWXMAAAsTAAALEwEAmpwYAAAEF0lEQVR4nI2SwU/bdhTHfd6fMcSBSrv1MG07oR5Wpna7tJE2dZoGYwfGYJ0Yp9aEMhjQoWW1XFCmYObWtTBWMwyZUUaWKUKUVkUJoSEimxMCS5Zgkvzwj1+I4+VNsRnqYYe9w09PX733Pnrv+6MAgBCCEAIAbMd/KqfV6pGuA4BpmrqdAICu66ZpOollWQBQKpWc+vOEIoSwLNve3k5RVFtbm9vtzuVyXq/3ZQUhFAqFvrh5k7Lj26mpaDSaSCSmpqYcZXBwMBAIYIy93h9aWlooinK5XD/OzRFCKE1LT0+zCCFZlnVd53ne7/d7vV6MsSzLhUKB5/nNzc33rl5lvvdsxbfD4d86O7tmOe6bsbEPrl/fTf0eDP4yOjr65cBAKBR6/eLFZDK5uhqSpIXLlzsKhQKl60dvvfHmVix2mM8CNGRZVlXV55t1rgEAgiDsJJOvXbjwbkcHQC27l361peXBw4f0rVuvUNRhPntaPXnnypXOzq5wOExR1Mb6GkB9ZGSstbUVY0wdHBxMTk4gVElrGiFEFEVVVTmOM00rl8sDgCRJkUjk/vT0ohKYFx/lcn/uplKPBEGSpMeLywvSfDy+peu6IAjBYJDnHyjK0spKAABmZmY0TWsCOI5zjHLGOQDHKLCVtbU1lmU1Tcvl8pZlJZNJWZYZhvnk4xsvEjt/aGlN03ieX11dvfHRh+tPNnaSu5ZlMQyTyWSagJmZ+wCA0LE9biEQCAiCYCvIUSKRiCiKlh0AkEqlJEkSBEFRFIxPMMalUumRKC4vL7muXYtGt7ZjzzHGLMueARiGKaF8PPE8kUp47n2nqqoDIIQAgN/vD4fDoiiaZv0cIIqiLMuapgGAZVkIIUEQVFXt/7yP5333PHcDgaWJyckzAMfNPnkanv9pdiW4ODI8dA5wTPb/C3CmOwBBEGRZTqVSjlIqlXieD4VCiqLY72I8Hh0fn2gC9vayczwX+nVlds7rX17o7ev9PwDxpQ2cY4qiGAwGJUmKxWJP1yMGQmceZDIZhmFyuYNnzzYyWY2m6SVF8fl8AHBkm8zzfCQS4TgOIYQxtixrK7bF87woivH4tmVZhBDnpyiK8valS7Ls//mxYCB0tgEhxOPxuN3unp6eIZoeHx8vFAosy9I0/Wl39xBND98ZJoTIskzTt3t7Pxsc/MrtdicSL6LRqNvtHhgY6O/vo+nbiqIQQkZHv+7q6na53h++M+zxeEzTpACgAbBfRPtFlC1WqrX6Manlj4x0vpzOlw8rJ1aj4SiZv8rZYiVdqByTWrVWzx8da/nSfhGl8+XyyWnd+rtsVPeLlWyxnLPbG/b1mgD7w1QryDAwIaR6WqsTUjUIKSEDGU3FajRM03KUSlNq1hiEIAMb+MQuw+eNyHAasWPhPwDrBUEy9vP2AAAAAElFTkSuQmCC" nextheight="686" nextwidth="1600" class="image-node embed"><figcaption htmlattributes="[object Object]" class=""><em>Profile Loading States</em></figcaption></figure><p>This pattern addresses a backend bottleneck : Loading data from multiple sources, all at once can be slow. It introduces a waterfall of layout loading state while various parts of the screen are being fetched.</p><p>However, this came at the tradeoff of making the user's experience substantially worse.</p><p>We wanted to do better. So we built a behavioral prefetching system in the new Base App to anticipate user behavior and deliver content instantly.</p><h2 id="h-solution-behavioral-data-driven-prefetching" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Solution: Behavioral, data-driven prefetching</h2><p>We have <em>data</em> on the navigation habits between different links and screens. E.g: Users on the Feed are more inclined to navigate to a <strong>Cast</strong> than a <strong>Profile</strong>.</p><p>We also know when links are <strong>in the viewport</strong>. We can use this to design a simple prefetching algorithm:</p><pre data-type="codeBlock" text="score = conversionRate * visibility * manual priority"><code>score <span class="hljs-operator">=</span> conversionRate <span class="hljs-operator">*</span> visibility <span class="hljs-operator">*</span> manual priority</code></pre><p>And start prefetching screens data accordingly:</p><figure float="none" data-type="figure" class="img-center" style="max-width: null;"><img src="https://storage.googleapis.com/papyrus_images/ea627e79fcad69eea2e67283f69b350ce8eece2d0698762aa1f4b93462006999.png" blurdataurl="data:image/png;base64,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" nextheight="1600" nextwidth="1424" class="image-node embed"><figcaption htmlattributes="[object Object]" class="hide-figcaption"></figcaption></figure><p>A simple idea in principle, with many caveats.</p><h3 id="h-overfetching" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0"><strong>Overfetching</strong></h3><p>There can be hundreds of links on any given screen — so how can we reduce scope and only prefetch visible items? Unfortunately react-native doesn’t have yet an <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://developer.mozilla.org/en-US/docs/Web/API/Intersection_Observer_API"><u>Intersection Observer API</u></a> so we came up with a few alternatives below.&nbsp;</p><div data-type="callout" type="info"><link rel="preload" as="image" href="https://paragraph.com/editor/callout/information-icon.png"><div class="callout-base callout-info" data-node-view-wrapper="" style="white-space:normal"><img src="https://paragraph.com/editor/callout/information-icon.png" class="callout-button"><div class="callout-content"><div><p><strong>Note:</strong> These snippets are meant to be educational / inspirational, copy-pasting as-is won’t work.</p></div></div></div></div><h3 id="h-measure-and-onlayout" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Measure &amp; onLayout</h3><p>With react’s&nbsp;<a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://reactnative.dev/architecture/landing-page"><u>New architecture</u></a>, we can leverage the useLayoutEffect &amp; <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://reactnative.dev/docs/the-new-architecture/layout-measurements"><u>measure method</u></a></p><pre data-type="codeBlock" text="function PrefetchOnVisible({ children, prefetchQuery }) {
+  const ref = useRef&lt;View&gt;(null);
+  const prefetchManager = PrefetchManager.getInstance();
+
+  // Synchronous, first-frame measure
+  useLayoutEffect(() =&gt; {
+    ref.current.measure((_x, _y, _width, _height, _pageX, pageY) =&gt; {
+
+      // Within Viewport?
+      const isComponentVisible = pageY &lt;= viewPortHeight &amp;&amp; pageY + 100 &gt;= 0;
+      if (!isComponentVisible) return;
+
+      prefetchManager.process(prefetchQuery);
+    });
+  }, [prefetchQuery]);
+
+  return &lt;View ref={ref}&gt;{children}&lt;/View&gt;;
+}"><code><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">PrefetchOnVisible</span>(<span class="hljs-params">{ children, prefetchQuery }</span>) </span>{
+  const ref <span class="hljs-operator">=</span> useRef<span class="hljs-operator">&lt;</span>View<span class="hljs-operator">&gt;</span>(null);
+  const prefetchManager <span class="hljs-operator">=</span> PrefetchManager.getInstance();
+
+  <span class="hljs-comment">// Synchronous, first-frame measure</span>
+  useLayoutEffect(() <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+    ref.current.measure((_x, _y, _width, _height, _pageX, pageY) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+
+      <span class="hljs-comment">// Within Viewport?</span>
+      const isComponentVisible <span class="hljs-operator">=</span> pageY <span class="hljs-operator">&lt;</span><span class="hljs-operator">=</span> viewPortHeight <span class="hljs-operator">&amp;</span><span class="hljs-operator">&amp;</span> pageY <span class="hljs-operator">+</span> <span class="hljs-number">100</span> <span class="hljs-operator">&gt;</span><span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+      <span class="hljs-keyword">if</span> (<span class="hljs-operator">!</span>isComponentVisible) <span class="hljs-keyword">return</span>;
+
+      prefetchManager.process(prefetchQuery);
+    });
+  }, [prefetchQuery]);
+
+  <span class="hljs-keyword">return</span> <span class="hljs-operator">&lt;</span>View ref<span class="hljs-operator">=</span>{ref}<span class="hljs-operator">&gt;</span>{children}<span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>View<span class="hljs-operator">&gt;</span>;
+}</code></pre><p>For legacy Architecture, we can fallback to <strong>onLayout</strong> callback:</p><pre data-type="codeBlock" text="function PrefetchOnVisible({ children, prefetchQuery }) {
+  const ref = useRef&lt;View&gt;(null);
+  const prefetchManager = PrefetchManager.getInstance();
+
+  // Asynchronous, next frame measure
+  const onLayout = useCallback(() =&gt; {
+    ref.current.measure((_x, _y, _width, _height, _pageX, pageY) =&gt; {
+
+      // Within Viewport?
+      const isComponentVisible = pageY &lt;= viewPortHeight &amp;&amp; pageY + 100 &gt;= 0;
+      if (!isComponentVisible) return;
+
+      prefetchManager.process(prefetchQuery);
+    });
+  }, [prefetchQuery]);
+
+  return (
+    &lt;View ref={ref} onLayout={onLayout}&gt;
+      {children}
+    &lt;/View&gt;
+  );
+}"><code><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">PrefetchOnVisible</span>(<span class="hljs-params">{ children, prefetchQuery }</span>) </span>{
+  const ref <span class="hljs-operator">=</span> useRef<span class="hljs-operator">&lt;</span>View<span class="hljs-operator">&gt;</span>(null);
+  const prefetchManager <span class="hljs-operator">=</span> PrefetchManager.getInstance();
+
+  <span class="hljs-comment">// Asynchronous, next frame measure</span>
+  const onLayout <span class="hljs-operator">=</span> useCallback(() <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+    ref.current.measure((_x, _y, _width, _height, _pageX, pageY) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+
+      <span class="hljs-comment">// Within Viewport?</span>
+      const isComponentVisible <span class="hljs-operator">=</span> pageY <span class="hljs-operator">&lt;</span><span class="hljs-operator">=</span> viewPortHeight <span class="hljs-operator">&amp;</span><span class="hljs-operator">&amp;</span> pageY <span class="hljs-operator">+</span> <span class="hljs-number">100</span> <span class="hljs-operator">&gt;</span><span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+      <span class="hljs-keyword">if</span> (<span class="hljs-operator">!</span>isComponentVisible) <span class="hljs-keyword">return</span>;
+
+      prefetchManager.process(prefetchQuery);
+    });
+  }, [prefetchQuery]);
+
+  <span class="hljs-keyword">return</span> (
+    <span class="hljs-operator">&lt;</span>View ref<span class="hljs-operator">=</span>{ref} onLayout<span class="hljs-operator">=</span>{onLayout}<span class="hljs-operator">&gt;</span>
+      {children}
+    <span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>View<span class="hljs-operator">&gt;</span>
+  );
+}</code></pre><p>Then wrap our links accordingly:</p><pre data-type="codeBlock" text="function ProfileLink({ children, profileId }) {
+  const navigateToProfile = useCallback(() =&gt; {
+    navigate('Profile', { profileId });
+  }, [profileId]);
+
+  const profileQuery = useProfileScreenContentQuery(profileId);
+
+  return (
+    &lt;PrefetchOnVisible prefetchQuery={profileQuery}&gt;
+      &lt;Pressable onPress={navigateToProfile}&gt;
+        {children}
+      &lt;/Pressable&gt;
+    &lt;/PrefetchOnVisible&gt;
+  );"><code><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">ProfileLink</span>(<span class="hljs-params">{ children, profileId }</span>) </span>{
+  const navigateToProfile <span class="hljs-operator">=</span> useCallback(() <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+    navigate(<span class="hljs-string">'Profile'</span>, { profileId });
+  }, [profileId]);
+
+  const profileQuery <span class="hljs-operator">=</span> useProfileScreenContentQuery(profileId);
+
+  <span class="hljs-keyword">return</span> (
+    <span class="hljs-operator">&lt;</span>PrefetchOnVisible prefetchQuery<span class="hljs-operator">=</span>{profileQuery}<span class="hljs-operator">&gt;</span>
+      <span class="hljs-operator">&lt;</span>Pressable onPress<span class="hljs-operator">=</span>{navigateToProfile}<span class="hljs-operator">&gt;</span>
+        {children}
+      <span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>Pressable<span class="hljs-operator">&gt;</span>
+    <span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>PrefetchOnVisible<span class="hljs-operator">&gt;</span>
+  );</code></pre><p>If <strong>ProfileLink</strong> is within the viewport when the screen renders, <strong>ProfileQuery</strong> will be fetched &amp; cached. Navigation to the profile will become instant.</p><p>However, this only works for static, non-scrollable screens: useLayoutEffect and useLayout only fire when the layout changes.</p><h3 id="h-virtualized-list-renderitem-and-onviewableitemschanged" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Virtualized list: renderItem &amp; onViewableItemsChanged</h3><p>Most if not all virtualized lists (<a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://reactnative.dev/docs/flatlist#onviewableitemschanged"><u>FlatList</u></a>, <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://shopify.github.io/flash-list/docs/usage#onviewableitemschanged"><u>FlashList</u></a> &amp; <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://www.legendapp.com/open-source/list/v2/props/#onviewableitemschanged"><u>LegendList</u></a>) have two methods we’re interested in:</p><ul><li><p><a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://reactnative.dev/docs/flatlist#required-renderitem"><u>renderItem</u></a></p></li><li><p><a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://reactnative.dev/docs/flatlist#onviewableitemschanged"><u>onViewableItemsChanged</u></a></p></li></ul><p>We can wrap these methods to keep track of when an item is visible on the screen:</p><p>Let’s start by wrapping renderItem function with a provider to share the item’s index:</p><pre data-type="codeBlock" text="function usWrappedRenderItem({ renderItem, listId }) {
+  
+  // Wrap list items with a provider surfacing the index of the item
+  return useCallback((args) =&gt; (
+    &lt;ListItemVisibilityProvider listItemVisibilityIndex={args.index} listId={listId}&gt;
+      {renderItem(args)}
+    &lt;/ListItemVisibilityProvider&gt;
+  ), [renderItem]);
+}"><code><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">usWrappedRenderItem</span>(<span class="hljs-params">{ renderItem, listId }</span>) </span>{
+  
+  <span class="hljs-comment">// Wrap list items with a provider surfacing the index of the item</span>
+  <span class="hljs-keyword">return</span> useCallback((args) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> (
+    <span class="hljs-operator">&lt;</span>ListItemVisibilityProvider listItemVisibilityIndex<span class="hljs-operator">=</span>{args.index} listId<span class="hljs-operator">=</span>{listId}<span class="hljs-operator">&gt;</span>
+      {renderItem(args)}
+    <span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>ListItemVisibilityProvider<span class="hljs-operator">&gt;</span>
+  ), [renderItem]);
+}</code></pre><p>All children within this function can now access their index within the list &amp; the listId:</p><pre data-type="codeBlock" text="const { index, listId } = useListItemVisibility()"><code>const { index, listId } = <span class="hljs-built_in">useListItemVisibility</span>()</code></pre><p>Next let’s wrap the onViewableItemsChanged callback:</p><pre data-type="codeBlock" text=" function useVisibilityTracker({ onViewableItemsChanged, listId }) {
+
+  // 1. Keep track of mounted list
+  useEffect(
+    function trackListVisibility() {
+      visibilityTracker.registerList(listId);
+
+      return visibilityTracker.removeList(listId);
+    },
+    [listId],
+  );
+
+  // 2 Update visible items when array of visible items changes
+  const updateVisibleItems = useCallback((visibleIndexes: Set&lt;number&gt;) =&gt; {
+    visibilityTracker.setVisibleItems(listId, visibleIndexes);
+  }, [listId]);
+
+  // 3. Debounce to avoid rapid-fire updates while scrolling
+  const debouncedUpdateVisibleItems = useDebouncedCallback(updateVisibleItems, 150);
+
+  // 4. Return the wrapped onViewableItemsChanged callback
+  return useCallback((event: { viewableItems: ViewToken[]; changed: ViewToken[] }) =&gt; {
+
+    // Call the original callback first
+    onViewableItemsChanged?.(event);
+
+    // Get visible indexes
+    const { viewableItems } = event;
+    const visibleIndexes = new Set(
+      viewableItems.filter(({ isViewable }) =&gt; !!isViewable).map(({ index }) =&gt; index),
+    );
+
+    debouncedUpdateVisibleItems(visibleIndexes);
+  }, [debouncedUpdateVisibleItems, onViewableItemsChanged]);
+}"><code> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">useVisibilityTracker</span>(<span class="hljs-params">{ onViewableItemsChanged, listId }</span>) </span>{
+
+  <span class="hljs-comment">// 1. Keep track of mounted list</span>
+  useEffect(
+    <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">trackListVisibility</span>(<span class="hljs-params"></span>) </span>{
+      visibilityTracker.registerList(listId);
+
+      <span class="hljs-keyword">return</span> visibilityTracker.removeList(listId);
+    },
+    [listId],
+  );
+
+  <span class="hljs-comment">// 2 Update visible items when array of visible items changes</span>
+  const updateVisibleItems <span class="hljs-operator">=</span> useCallback((visibleIndexes: Set<span class="hljs-operator">&lt;</span>number<span class="hljs-operator">&gt;</span>) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+    visibilityTracker.setVisibleItems(listId, visibleIndexes);
+  }, [listId]);
+
+  <span class="hljs-comment">// 3. Debounce to avoid rapid-fire updates while scrolling</span>
+  const debouncedUpdateVisibleItems <span class="hljs-operator">=</span> useDebouncedCallback(updateVisibleItems, <span class="hljs-number">150</span>);
+
+  <span class="hljs-comment">// 4. Return the wrapped onViewableItemsChanged callback</span>
+  <span class="hljs-keyword">return</span> useCallback((<span class="hljs-function"><span class="hljs-keyword">event</span>: </span>{ viewableItems: ViewToken[]; changed: ViewToken[] }) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+
+    <span class="hljs-comment">// Call the original callback first</span>
+    onViewableItemsChanged?.(<span class="hljs-function"><span class="hljs-keyword">event</span>)</span>;
+
+    <span class="hljs-comment">// Get visible indexes</span>
+    const { viewableItems } <span class="hljs-operator">=</span> <span class="hljs-function"><span class="hljs-keyword">event</span></span>;
+    const visibleIndexes <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> Set(
+      viewableItems.filter(({ isViewable }) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> <span class="hljs-operator">!</span><span class="hljs-operator">!</span>isViewable).map(({ index }) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> index),
+    );
+
+    debouncedUpdateVisibleItems(visibleIndexes);
+  }, [debouncedUpdateVisibleItems, onViewableItemsChanged]);
+}</code></pre><p>And finally, use this in our lists:</p><pre data-type="codeBlock" text="const wrappedRenderItem = useWrappedRenderItem({
+    renderItem,
+    listId: 'MyList',
+});
+
+ const wrappedOnViewableItemsChanged = useVisibilityTracker({
+    onViewableItemsChanged
+    listId: 'MyList',
+});
+
+return (
+  &lt;FlashList 
+    renderItem={wrappedRenderItem}
+    onViewableItemsChanged={wrappedOnViewableItemsChanged}
+    ..."><code>const <span class="hljs-attr">wrappedRenderItem</span> = useWrappedRenderItem({
+    renderItem,
+    listId: 'MyList',
+})<span class="hljs-comment">;</span>
+
+ const <span class="hljs-attr">wrappedOnViewableItemsChanged</span> = useVisibilityTracker({
+    onViewableItemsChanged
+    listId: 'MyList',
+})<span class="hljs-comment">;</span>
+
+return (
+  &lt;FlashList 
+    <span class="hljs-attr">renderItem</span>={wrappedRenderItem}
+    <span class="hljs-attr">onViewableItemsChanged</span>={wrappedOnViewableItemsChanged}
+    ...</code></pre><p>With this,&nbsp; we effectively gave our list items full visibility context, so we can use this to prefetch our data like so:</p><pre data-type="codeBlock" text="function PrefetchListItemOnVisible({
+  children,
+  prefetchQuery,
+}) {
+  const visibilityTracker = ListVisibilityTracker.getInstance();
+  
+  // from wrappedRenderItem
+  const { index, listId } = useListItemVisibility();
+
+  // Subscribe on mount
+  useEffect(() =&gt; {
+    visibilityTracker.subscribe('listId', (visibleIndexes) =&gt; {
+
+      // Item index is not in the viewport, return
+      if(!visibleIndexes.has(index)) return;
+
+      // Item is in the viewport, prefetch !
+      prefetchManager.process(prefetchQuery);
+    });
+
+    return () =&gt; visibilityTracker.unsubscribe();
+  }, []);
+
+  return children;
+}; "><code><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">PrefetchListItemOnVisible</span>(<span class="hljs-params">{
+  children,
+  prefetchQuery,
+}</span>) </span>{
+  const visibilityTracker <span class="hljs-operator">=</span> ListVisibilityTracker.getInstance();
+  
+  <span class="hljs-comment">// from wrappedRenderItem</span>
+  const { index, listId } <span class="hljs-operator">=</span> useListItemVisibility();
+
+  <span class="hljs-comment">// Subscribe on mount</span>
+  useEffect(() <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+    visibilityTracker.subscribe(<span class="hljs-string">'listId'</span>, (visibleIndexes) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+
+      <span class="hljs-comment">// Item index is not in the viewport, return</span>
+      <span class="hljs-keyword">if</span>(<span class="hljs-operator">!</span>visibleIndexes.has(index)) <span class="hljs-keyword">return</span>;
+
+      <span class="hljs-comment">// Item is in the viewport, prefetch !</span>
+      prefetchManager.process(prefetchQuery);
+    });
+
+    <span class="hljs-keyword">return</span> () <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> visibilityTracker.unsubscribe();
+  }, []);
+
+  <span class="hljs-keyword">return</span> children;
+}; </code></pre><p>The hard part is done, and what’s next is we have&nbsp; scroll-aware viewport context and can prefetch data accordingly.</p><h3 id="h-backend-strain" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0"><strong>Backend strain:</strong></h3><p>Even when fetching only visible data, this can still mean hundreds of requests per user, multiplied across hundreds of thousands of users.</p><h3 id="h-its-queue-time" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">It’s queue time&nbsp;</h3><p>An on-device queue gives us flexibility and safety, we can add delay, max concurrent requests &amp; even a set maximum request per minutes:</p><figure float="none" data-type="figure" class="img-center" style="max-width: null;"><img src="https://storage.googleapis.com/papyrus_images/4cd6283975370b7d06d9903ce2e18e785213962fa72ff320a93c699f8630ce73.png" blurdataurl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAOCAIAAADBvonlAAAACXBIWXMAAAsTAAALEwEAmpwYAAACcElEQVR4nLWTTWgTQRTH9+hBCLQoFERka6Ey9tDaBUVZUMHG+oFsEUS72FtU6kc3tGLS8aDGDBTEw2iPc0yZWkQoo2CFdvAgFAYtVWRTi2C6lB6StFPsIYGR7IbYQNrGg7/D8mZ58/77/u+tpnwKxUKhWFD/Ac3zvNGXoxu/N7ZJSqcXMMac83oqSrleJTD3df5sT3fvzevRh4P808egG6VUNpeVUgYXcvm867rBsbqW3EqjIqOJL5977MsN+/bs2rv7zIWu8YlXSqm5+Tk29Xbs9fjiz0WlVC6fn5mZppQyH845pVQIoZRyXbfyUvgkRp5nlry/HaQmUu0d7Z0dneAQaDnYAoy289cuxh4P9w/dffAo1j90+150oLm5ORwOE0I0TQuFQrquu64bDocBAJqmIYQ0H9u2U2Nj+1uPHDjcefRU97up6fzqWqmDq329x0+eaG1rjcYHn4wksrns++kPiWfJ1Bua/rGQTi9MTpa+kRBiWZZhGI7jEEIYY0KIIEAIRSKRZPLp7Oxs3407x06f67p05dbA/W/f01rQCOc8EolUBhD4W7FYynUhBKUUQggAYIxRSj3P25y5Ob9qyEopjHFjQyMAwHGcmkP7lck4jtPU1BQKhYKnaZqU0m0mLOV6oVgsC3DObR/GWM07mSWP+EAILctCCEEI69zakoCU0nVdCGHNzSsUi/nVNc+Hcx6kCSEqFu0gIKVECFk+GGPGWFAoQPhg/IJSGovHdV0HAJimWf9/VxYwDEPXdQghQohzjjEOYgghISQ2XI5NH9u2KaX/YJHneVLKwITtLaqsylY7U1tgR5aXV+pJqynwB+qEOYjljmNpAAAAAElFTkSuQmCC" nextheight="684" nextwidth="1600" class="image-node embed"><figcaption htmlattributes="[object Object]" class="hide-figcaption"></figcaption></figure><p>We also can set these queue options based on device class: A last-gen iPhone Pro can prefetch hundreds of queries in seconds, but a low-end Android phone will start struggling almost immediately.</p><h3 id="h-killswitches" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Killswitches</h3><p>Even the most moderate queue settings and conservative visibility tracking can’t avoid overfetching entirely: We added fine-grained killswitches by defining “Triggers,” e.g. Link to a screen &amp; “Target” e.g. The screen.</p><p>If our profile backend sees an abnormal strain from prefetching, we can disable specific prefetching flow like “search results → profile”, or disable profile prefetching entirely.</p><figure float="none" data-type="figure" class="img-center" style="max-width: null;"><img src="https://storage.googleapis.com/papyrus_images/e79d28ef49b28180e5a1353bca0f354b563a8ca065c5c42543225a229651da0a.png" blurdataurl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAVCAIAAACor3u9AAAACXBIWXMAAAsTAAALEwEAmpwYAAADPElEQVR4nKWUT2gbRxSHlxwDoQVDClvcgg6JyGlzU8AH0X/YvVite9g4+FQfolJTuj203TS0eJ24bSYhaTQtjSlTmxatgxOrG1RqDfEhWaUIowWbSOOGJnZHxkQalEs7AiGLLZqJFceVjKJ+CLGH2ffNe7/ZUfyu2KrXt+r1TlYqXVSfmb1+9jw8+aF55cd4R4LNh8ViiW0+LFYqlT2Wcs4xxr/fuTOf+OWbGBz76OOJya9d9zbGmHPeVrBVr7/7nvG+YR48dPTit1O+X+ecM0GzLhfvY4xd16W0wFiJsdJGobBRKDDGbNtuLm4hoJSmUgvTCEUFhmEAADDGAADbtncu9TyvZSHXdfcSOI7DGHNdNxwOh0IhTdP6+/sppRDCYDCoCcICVVW7ETDGEEKmaRqGcerUZ5ZlAQAsy4IQcs4ppd42wWCQEPLMAkopAMBxHNu2HYEtQAjtis4RvT6zgBBiWVaPQFXVQCDQ09Oj63o0Go0IwuGwpmmqqipKYzfN2HeG/19BRdAQcM7lrqEAIeQ4DsYYIcQYk1XkA4RQCnYhBeb4V30DQ8OjY30DQ4MnRosl9iQDCKEcvSmQzxBCWdffBgDAOfc8T7al67plWZRSOaKl7HIimUpnskvZlXQmm85kP/jkC28l1zhFgUBAeRpN00KhUCQS0XXdEEQiETkiQkg0GpUzBABQSjHGlNJc/t7d/OpSdln+pzPZ0xPn7uZXGxkggWmaAIDLsRhCqGXICKGWI2oX/uMR+R0DtzPYFXJLQfM2VCqVSjqTXVi85a3kEslUIplaWLzVjMjfcR667ODvf/i1G7+9/tbwsdcGT0+ce/OdkVcix8/HrhRLzFvJ3V8rSIfv+7Zt73GK2gp8308kU9+jnxPJVHwu8dPV+ficcyT0at/A0IGXj7zx9sgZcPma8+v/EkxNxz8/A768ACcvxIxPxy9998O+FwLKcy/u7w0eeCmoKM/v7z08M3vddW938yX7vl8uP6rWatVarVx+VGLlaq22tv5XLn8vT/5YpxuVavXPB2slVl68eRNjTAhxXRcLxO1N23X2RNAh8isjhMgrS0IEe7y1W1Ct1WRPzbaav863slPwL/HuiHWfhFExAAAAAElFTkSuQmCC" nextheight="1033" nextwidth="1600" class="image-node embed"><figcaption htmlattributes="[object Object]" class="hide-figcaption"></figcaption></figure><p>Now that frontend won’t overfetch, and we have multiple mitigations in place for our backend. Time for the elephant in the room: DevX</p><h3 id="h-devx" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0"><span data-name="elephant" class="emoji" data-type="emoji">🐘</span> <strong>DevX</strong></h3><p>We have 20+ classes, components, context, helpers, hooks. How can we make the process of <em>implementing</em> prefetching easy?</p><p><strong>Solution:</strong> a single API for prefetching target &amp; triggers:</p><pre data-type="codeBlock" text="function createPrefetchableComponent( { query, prefetchTarget, options }, Component) {
+
+  // Wraps &quot;target&quot; component
+  const PrefetchableComponent = memo(function PrefetchableComponent({ variables }) {
+
+    // Fetching &amp; refresh methods
+    const queryRef = useLazyLoadQuery(query, variables, options);
+    const { refresh, isRefreshing } = useRefreshQuery(query, variables);
+
+    const props = { queryRef, refresh, isRefreshing, variables };
+
+    return &lt;Component {...props} /&gt;
+  });
+
+  // Attach the Trigger component with the query &amp; prefetchTarget
+  PrefetchableComponent.TriggerComponent = memo(function TriggerComponent({ children }) {
+    return &lt;PrefetchObserver prefetchQuery={query} &gt;{children}&lt;/PrefetchObserver&gt;;
+  });
+
+
+  return PrefetchableComponent;
+}"><code><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">createPrefetchableComponent</span>(<span class="hljs-params"> { query, prefetchTarget, options }, Component</span>) </span>{
+
+  <span class="hljs-comment">// Wraps "target" component</span>
+  const PrefetchableComponent <span class="hljs-operator">=</span> memo(<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">PrefetchableComponent</span>(<span class="hljs-params">{ variables }</span>) </span>{
+
+    <span class="hljs-comment">// Fetching &amp; refresh methods</span>
+    const queryRef <span class="hljs-operator">=</span> useLazyLoadQuery(query, variables, options);
+    const { refresh, isRefreshing } <span class="hljs-operator">=</span> useRefreshQuery(query, variables);
+
+    const props <span class="hljs-operator">=</span> { queryRef, refresh, isRefreshing, variables };
+
+    <span class="hljs-keyword">return</span> <span class="hljs-operator">&lt;</span>Component {...props} <span class="hljs-operator">/</span><span class="hljs-operator">&gt;</span>
+  });
+
+  <span class="hljs-comment">// Attach the Trigger component with the query &amp; prefetchTarget</span>
+  PrefetchableComponent.TriggerComponent <span class="hljs-operator">=</span> memo(<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">TriggerComponent</span>(<span class="hljs-params">{ children }</span>) </span>{
+    <span class="hljs-keyword">return</span> <span class="hljs-operator">&lt;</span>PrefetchObserver prefetchQuery<span class="hljs-operator">=</span>{query} <span class="hljs-operator">&gt;</span>{children}<span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>PrefetchObserver<span class="hljs-operator">&gt;</span>;
+  });
+
+
+  <span class="hljs-keyword">return</span> PrefetchableComponent;
+}</code></pre><div data-type="callout" type="info"><link rel="preload" as="image" href="https://paragraph.com/editor/callout/information-icon.png"><div class="callout-base callout-info" data-node-view-wrapper="" style="white-space:normal"><img src="https://paragraph.com/editor/callout/information-icon.png" class="callout-button"><div class="callout-content"><div><p><strong><em>Note:</em></strong><em> This is a heavily simplified snippet, in practice it’s a typescript fiesta.</em></p></div></div></div></div><p>Then use this to wrap our prefetchable components:</p><pre data-type="codeBlock" text="const PrefetchableProfile = createPrefetchableComponent({ 
+  query: profileQuery,
+  prefetchTarget: 'profile'
+}, function Profile({data, refresh}) {
+   
+   // ...
+
+})"><code><span class="hljs-keyword">const</span> <span class="hljs-title class_">PrefetchableProfile</span> = <span class="hljs-title function_">createPrefetchableComponent</span>({ 
+  <span class="hljs-attr">query</span>: profileQuery,
+  <span class="hljs-attr">prefetchTarget</span>: <span class="hljs-string">'profile'</span>
+}, <span class="hljs-keyword">function</span> <span class="hljs-title function_">Profile</span>(<span class="hljs-params">{data, refresh}</span>) {
+   
+   <span class="hljs-comment">// ...</span>
+
+})</code></pre><p>And finally around our triggers:</p><pre data-type="codeBlock" text=" function ProfileLink({ children, profileId }) {
+  const navigateToProfile = useCallback(() =&gt; {
+    navigate('Profile', { profileId });
+  }, [profileId]);
+
+  return (
+    &lt;PrefetchableProfile.TriggerComponent variables={{profileId}}&gt;
+      &lt;Pressable onPress={navigateToProfile}&gt;
+        {children}
+      &lt;/Pressable&gt;
+    &lt;/PrefetchableProfile.TriggerComponent&gt;
+  );"><code> <span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">ProfileLink</span>(<span class="hljs-params">{ children, profileId }</span>) </span>{
+  const navigateToProfile <span class="hljs-operator">=</span> useCallback(() <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+    navigate(<span class="hljs-string">'Profile'</span>, { profileId });
+  }, [profileId]);
+
+  <span class="hljs-keyword">return</span> (
+    <span class="hljs-operator">&lt;</span>PrefetchableProfile.TriggerComponent variables<span class="hljs-operator">=</span>{{profileId}}<span class="hljs-operator">&gt;</span>
+      <span class="hljs-operator">&lt;</span>Pressable onPress<span class="hljs-operator">=</span>{navigateToProfile}<span class="hljs-operator">&gt;</span>
+        {children}
+      <span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>Pressable<span class="hljs-operator">&gt;</span>
+    <span class="hljs-operator">&lt;</span><span class="hljs-operator">/</span>PrefetchableProfile.TriggerComponent&gt;
+  );</code></pre><p>Add a couple AI rules and context on top, and implementing prefetching becomes one-shotable.</p><h2 id="h-results" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Results</h2><h4 id="h-smooth-ux" class="text-xl font-header !mt-6 !mb-3 first:!mt-0 first:!mb-0">Smooth UX</h4><p>Previously, navigating between tabs led to a shimmer fest:</p><div data-type="youtube" videoid="W9Cq9H-TOYA">
+      <div class="youtube-player" data-id="W9Cq9H-TOYA" style="background-image: url('https://i.ytimg.com/vi/W9Cq9H-TOYA/hqdefault.jpg'); background-size: cover; background-position: center">
+        <a href="https://www.youtube.com/watch?v=W9Cq9H-TOYA">
+          <img src="https://paragraph.com/editor/youtube/play.png" class="play">
+        </a>
+      </div></div><p>With prefetching enabled, navigation &amp; rendering is instant:</p><div data-type="youtube" videoid="PDdOG2-2ocM">
+      <div class="youtube-player" data-id="PDdOG2-2ocM" style="background-image: url('https://i.ytimg.com/vi/PDdOG2-2ocM/hqdefault.jpg'); background-size: cover; background-position: center">
+        <a href="https://www.youtube.com/watch?v=PDdOG2-2ocM">
+          <img src="https://paragraph.com/editor/youtube/play.png" class="play">
+        </a>
+      </div></div><p>We added debugging tools to let us “see” the prefetching in action</p><div data-type="youtube" videoid="6mxZC4wk3ms">
+      <div class="youtube-player" data-id="6mxZC4wk3ms" style="background-image: url('https://i.ytimg.com/vi/6mxZC4wk3ms/hqdefault.jpg'); background-size: cover; background-position: center">
+        <a href="https://www.youtube.com/watch?v=6mxZC4wk3ms">
+          <img src="https://paragraph.com/editor/youtube/play.png" class="play">
+        </a>
+      </div></div><figure float="none" data-type="figure" class="img-center" style="max-width: null;"><img src="https://storage.googleapis.com/papyrus_images/a4f95d0d0e414ae954737bc160f6c9c6c6e100979afa355d8102f05b948e5f7f.svg" blurdataurl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAICAIAAAAX52r4AAAACXBIWXMAAAsTAAALEwEAmpwYAAAB8ElEQVR4nI2RQYTjUBzGH70OITZ6qRJWPDOWUFmlrCilx9LTKt1DCSHUHqKEHNYjhOyWEkLtI4SytuZQyhx66mHW6qlG9RBKDjFsCFWx7YS3NLMrs3bY3+n5/v/n8/0/QAj5dn39cDrtdjvf95MkSdM0PkMI2e/35DdBEByPx/2ZP6MoirJpHMfHM4SQbC3TQXB39wKAdyxnmiaEkOO46XRqmibDMJeXV9VqVVEUiqJEUaQo6tUZlmVFUazX6xzHqapK07QgCK1WS1GUYrHI83yhUGg2m48GhJAvlvXzcCDPkKZpkiR/idvtlvwfIIpicPX26813TdNkWcYYr1arxWLhOI7neZZl2bYtSdJyucQYe56HMbYsyzCM0WjU6/UQQqqqIoRc1x2fQQg9Mbj/EQMA3qPPnuchhPr9/nq9Xi6Xtm27rqvr+mQy6XQ68/lc1/XhcGia5mAwcByn2+1myng8tixLkiSMsSzLmqY9MSCE3Pq3p4dTGIZpmuYvE4ZhfjWKonznWZnZl6zbKIoyJX9S4N/74CV4/eFNp9NhWZZhGAjhbDbDGAuCUDsDIazVaizLXlxcGIbRbrcrlQrDMBRF0TRdKpVkWYYQlstlAADP8xDCRqPhOM5jgo/TT4fk2ZLzBEGQD/TPd8Zms8ni/gI0JyBX+9b1IAAAAABJRU5ErkJggg==" nextheight="100" nextwidth="384" class="image-node embed"><figcaption htmlattributes="[object Object]" class="hide-figcaption"></figcaption></figure><h4 id="h-performance" class="text-xl font-header !mt-6 !mb-3 first:!mt-0 first:!mb-0">Performance</h4><p>We measure our app’s performance via a <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://www.coinbase.com/blog/performance-vitals-a-unified-scoring-system-to-guide-performance-health-and-prioritization"><u>unified scoring system</u></a> introduced at Coinbase:</p><ul><li><p><strong>NTBT</strong>: Navigation Total Blocking Time</p></li><li><p><strong>ART</strong>: Above the fold Rendering Time</p></li><li><p><strong>TRT</strong>: Total Rendering Time</p></li></ul><p>Together, these metrics capture how quickly users can interact, see initial content, and view the fully loaded screen.</p><p>See performance comparison results on High End devices:</p><p><strong>NTBT: -80-100%<br><br></strong>The data is available in cache, no suspense is triggered and navigation is instant</p><pre data-type="codeBlock" text="| Screen        | Before | After | Diff (%) |
+|---------------|--------|-------|----------|
+| Search        | 44     | 0     | -100%    |
+| Transact      | 183    | 25    | -86.3%   |
+| Notifications | 48     | 0     | -100%    |
+| Wallet        | 126    | 38    | -69.8%   |
+| Profile       | 229    | 0     | -100%    |"><code><span class="hljs-operator">|</span> Screen        <span class="hljs-operator">|</span> Before <span class="hljs-operator">|</span> After <span class="hljs-operator">|</span> Diff (<span class="hljs-operator">%</span>) <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Search        <span class="hljs-operator">|</span> <span class="hljs-number">44</span>     <span class="hljs-operator">|</span> <span class="hljs-number">0</span>     <span class="hljs-operator">|</span> <span class="hljs-number">-100</span><span class="hljs-operator">%</span>    <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Transact      <span class="hljs-operator">|</span> <span class="hljs-number">183</span>    <span class="hljs-operator">|</span> <span class="hljs-number">25</span>    <span class="hljs-operator">|</span> <span class="hljs-number">-86.3</span><span class="hljs-operator">%</span>   <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Notifications <span class="hljs-operator">|</span> <span class="hljs-number">48</span>     <span class="hljs-operator">|</span> <span class="hljs-number">0</span>     <span class="hljs-operator">|</span> <span class="hljs-number">-100</span><span class="hljs-operator">%</span>    <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Wallet        <span class="hljs-operator">|</span> <span class="hljs-number">126</span>    <span class="hljs-operator">|</span> <span class="hljs-number">38</span>    <span class="hljs-operator">|</span> <span class="hljs-number">-69.8</span><span class="hljs-operator">%</span>   <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Profile       <span class="hljs-operator">|</span> <span class="hljs-number">229</span>    <span class="hljs-operator">|</span> <span class="hljs-number">0</span>     <span class="hljs-operator">|</span> <span class="hljs-number">-100</span><span class="hljs-operator">%</span>    <span class="hljs-operator">|</span></code></pre><p><strong>TRT &amp; ART: -70-80%</strong></p><p>We skip the loading steps entirely, the screen renders near-instantly in its final state.</p><pre data-type="codeBlock" text="| Screen        | Before | After | Diff (%) |
+|---------------|--------|-------|----------|
+| Search        | 283    | 33    | -88.3%   |
+| Transact      | 765    | 141   | -81.6%   |
+| Notifications | 447    | 127   | -71.6%   |
+| Wallet        | 849    | 128   | -84.9%   |
+| Profile       | 511    | 94    | -81.6%   |"><code><span class="hljs-operator">|</span> Screen        <span class="hljs-operator">|</span> Before <span class="hljs-operator">|</span> After <span class="hljs-operator">|</span> Diff (<span class="hljs-operator">%</span>) <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">-</span><span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Search        <span class="hljs-operator">|</span> <span class="hljs-number">283</span>    <span class="hljs-operator">|</span> <span class="hljs-number">33</span>    <span class="hljs-operator">|</span> <span class="hljs-number">-88.3</span><span class="hljs-operator">%</span>   <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Transact      <span class="hljs-operator">|</span> <span class="hljs-number">765</span>    <span class="hljs-operator">|</span> <span class="hljs-number">141</span>   <span class="hljs-operator">|</span> <span class="hljs-number">-81.6</span><span class="hljs-operator">%</span>   <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Notifications <span class="hljs-operator">|</span> <span class="hljs-number">447</span>    <span class="hljs-operator">|</span> <span class="hljs-number">127</span>   <span class="hljs-operator">|</span> <span class="hljs-number">-71.6</span><span class="hljs-operator">%</span>   <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Wallet        <span class="hljs-operator">|</span> <span class="hljs-number">849</span>    <span class="hljs-operator">|</span> <span class="hljs-number">128</span>   <span class="hljs-operator">|</span> <span class="hljs-number">-84.9</span><span class="hljs-operator">%</span>   <span class="hljs-operator">|</span>
+<span class="hljs-operator">|</span> Profile       <span class="hljs-operator">|</span> <span class="hljs-number">511</span>    <span class="hljs-operator">|</span> <span class="hljs-number">94</span>    <span class="hljs-operator">|</span> <span class="hljs-number">-81.6</span><span class="hljs-operator">%</span>   <span class="hljs-operator">|</span></code></pre><p>We saw similar results on low end devices</p><p><strong>NTBT: -60%<br><br></strong>The data is available in cache, but de-serialization is still expensive on low end devices.<br><br><strong>TRT &amp; ART: -40%</strong></p><p>Rendering is faster but still expensive on low end devices.</p><hr><h1 id="h-try-it-out-today" class="text-4xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Try it out today</h1><p>Download the <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://join.base.app/"><u>Base app</u></a> and experience instant, seamless navigation for yourself—no shimmers, no waiting, just the onchain everything app the way it's meant to feel.</p><hr><h2 id="h-appendix-rendering-tech-stack-and-rn-new-architecture" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Appendix: Rendering, Tech Stack &amp; RN New Architecture</h2><p>Curiously, a few screens remained stubbornly slow even with prefetching enabled. What's going on?</p><p>All our investigations pointed to the same conclusion: Our stack was aging.</p><p>Running React Native <strong>0.77.3</strong> in legacy mode meant missing out on bug fixes &amp; new features.</p><p>The New Architecture, its flashy new Fabric UI rendering engine and bridgeless native call should also streamline rendering.</p><p>But more importantly, it blocked us from upgrading third‑party libraries like FlashList V2, Reanimated V4, and many others that have already moved to the <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://reactnative.dev/architecture/landing-page"><u>New Architecture</u></a>.<br><br>In theory, it’s just a matter of switching a flag somewhere in the app config:</p><pre data-type="codeBlock" text="-newArchEnabled=true
++newArchEnabled=false"><code><span class="hljs-attr">-newArchEnabled</span>=<span class="hljs-literal">true</span>
++<span class="hljs-attr">newArchEnabled</span>=<span class="hljs-literal">false</span></code></pre><p>Sounds easy enough right?</p><p>Subscribe to the <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://blog.base.dev">Base Engineering Blog</a> &amp; stay tuned for more on the New Architecture.</p>
+`;
+
+![Building The New Base App: Prefetching at Scale](https://storage.googleapis.com/papyrus_images/0f74c08b4e1e348abc921ad693f67c1a2b47aa7d7aed8cb4abd45c411be07fe5.jpg)
+
+<ImportedHtml html={html} />

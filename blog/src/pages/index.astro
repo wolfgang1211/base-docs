@@ -1,0 +1,209 @@
+---
+import { getCollection } from 'astro:content';
+import BaseBlogLayout from '../layouts/BaseBlogLayout.astro';
+
+const posts = (await getCollection('posts'))
+  .filter((post) => !post.data.draft)
+  .sort((left, right) => right.data.publishedAt.getTime() - left.data.publishedAt.getTime());
+
+const withBase = (path: string) => `${import.meta.env.BASE_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
+const allTags = Array.from(new Set(posts.flatMap((post) => post.data.tags))).sort();
+---
+
+<BaseBlogLayout description="Articles from the Base Engineering team.">
+  <section class="site-shell page-intro">
+    <h1>Base Engineering Blog</h1>
+    <p>
+      Articles from the Base Engineering team about our work to build a global onchain economy that increases innovation, creativity, and freedom
+    </p>
+  </section>
+
+  <section class="site-shell home-grid">
+    <div class="post-browser surface-card">
+      <div class="post-browser__head">
+        <span class="meta-row" data-filter-list-label>All posts</span>
+      </div>
+
+      <div class="post-list" data-post-list>
+        {posts.map((post) => (
+          <a
+            class="surface-card post-list__item"
+            href={withBase(`/posts/${post.id}/`)}
+            data-post-card
+            data-tags={post.data.tags.join('|')}
+          >
+            <div class="meta-row">
+              <span>
+                {new Intl.DateTimeFormat('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                }).format(post.data.publishedAt)}
+              </span>
+              <span>•</span>
+              <span>{post.data.author}{post.data.role ? ` · ${post.data.role}` : ''}</span>
+            </div>
+            <h3 style="margin: 10px 0 8px; font-size: 1.45rem; letter-spacing: -0.04em;">{post.data.title}</h3>
+            <p class="lede" style="margin: 0; max-width: 64ch;">{post.data.description}</p>
+            {post.data.tags.length > 0 && (
+              <div class="tag-row" style="margin-top: 14px;">
+                {post.data.tags.map((tag) => <span class="tag">{tag}</span>)}
+              </div>
+            )}
+          </a>
+        ))}
+
+        <div class="surface-card post-list__empty is-hidden" data-empty-state>
+          No posts match that tag yet.
+        </div>
+      </div>
+
+      <div class="post-pagination" data-pagination>
+        <button class="site-pill post-pagination__button" type="button" data-pagination-prev>
+          Previous
+        </button>
+        <span class="post-pagination__status meta-row" data-pagination-status>
+          Page 1 of 1
+        </span>
+        <button class="site-pill post-pagination__button" type="button" data-pagination-next>
+          Next
+        </button>
+      </div>
+    </div>
+
+    <div class="hero__filters surface-card">
+      <div class="hero__filters-head">
+        <span class="eyebrow" style="margin-bottom: 0;">Filter posts</span>
+        <p class="hero__filters-copy">Click a tag to narrow the post list on the left.</p>
+      </div>
+
+      <div class="filter-chip-list" data-filter-group>
+        <button class="filter-chip is-active" type="button" data-filter-chip data-tag="all" aria-pressed="true">
+          All tags
+        </button>
+        {allTags.map((tag) => (
+          <button class="filter-chip" type="button" data-filter-chip data-tag={tag} aria-pressed="false">
+            {tag}
+          </button>
+        ))}
+      </div>
+
+      <p class="hero__filters-caption" data-filter-status>
+        Showing all {posts.length} posts.
+      </p>
+    </div>
+  </section>
+
+  <script is:inline>
+    const chips = Array.from(document.querySelectorAll('[data-filter-chip]'));
+    const cards = Array.from(document.querySelectorAll('[data-post-card]'));
+    const status = document.querySelector('[data-filter-status]');
+    const emptyState = document.querySelector('[data-empty-state]');
+    const listLabel = document.querySelector('[data-filter-list-label]');
+    const pagination = document.querySelector('[data-pagination]');
+    const paginationStatus = document.querySelector('[data-pagination-status]');
+    const prevButton = document.querySelector('[data-pagination-prev]');
+    const nextButton = document.querySelector('[data-pagination-next]');
+    const pageSize = 10;
+    let currentPage = 1;
+    let currentTag = 'all';
+
+    const getFilteredCards = () => {
+      return cards.filter((card) => {
+        const tags = (card.dataset.tags || '').split('|').filter(Boolean);
+        return currentTag === 'all' || tags.includes(currentTag);
+      });
+    };
+
+    const updatePagination = () => {
+      const filteredCards = getFilteredCards();
+      const totalPages = Math.max(1, Math.ceil(filteredCards.length / pageSize));
+      currentPage = Math.min(currentPage, totalPages);
+
+      filteredCards.forEach((card, index) => {
+        const page = Math.floor(index / pageSize) + 1;
+        card.classList.toggle('is-hidden', page !== currentPage);
+      });
+
+      const hasResults = filteredCards.length > 0;
+
+      if (pagination) {
+        pagination.classList.toggle('is-hidden', !hasResults || totalPages <= 1);
+      }
+
+      if (paginationStatus) {
+        paginationStatus.textContent = hasResults
+          ? `Page ${currentPage} of ${totalPages}`
+          : 'Page 0 of 0';
+      }
+
+      if (prevButton) {
+        prevButton.disabled = !hasResults || currentPage === 1;
+      }
+
+      if (nextButton) {
+        nextButton.disabled = !hasResults || currentPage === totalPages;
+      }
+    };
+
+    const updateFilter = (tag) => {
+      let visibleCount = 0;
+      currentTag = tag;
+      currentPage = 1;
+
+      chips.forEach((chip) => {
+        const active = chip.dataset.tag === tag;
+        chip.classList.toggle('is-active', active);
+        chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+
+      cards.forEach((card) => {
+        const tags = (card.dataset.tags || '').split('|').filter(Boolean);
+        const visible = tag === 'all' || tags.includes(tag);
+        card.classList.toggle('is-hidden', !visible);
+        if (visible) {
+          visibleCount += 1;
+        }
+      });
+
+      if (status) {
+        status.textContent = tag === 'all'
+          ? `Showing all ${visibleCount} posts.`
+          : `Showing ${visibleCount} post${visibleCount === 1 ? '' : 's'} tagged “${tag}.”`;
+      }
+
+      if (listLabel) {
+        listLabel.textContent = tag === 'all' ? 'All posts' : `Filtered by “${tag}”`;
+      }
+
+      if (emptyState) {
+        emptyState.classList.toggle('is-hidden', visibleCount !== 0);
+      }
+
+      updatePagination();
+    };
+
+    chips.forEach((chip) => {
+      chip.addEventListener('click', () => {
+        updateFilter(chip.dataset.tag || 'all');
+      });
+    });
+
+    if (prevButton) {
+      prevButton.addEventListener('click', () => {
+        currentPage = Math.max(1, currentPage - 1);
+        updatePagination();
+      });
+    }
+
+    if (nextButton) {
+      nextButton.addEventListener('click', () => {
+        const totalPages = Math.max(1, Math.ceil(getFilteredCards().length / pageSize));
+        currentPage = Math.min(totalPages, currentPage + 1);
+        updatePagination();
+      });
+    }
+
+    updateFilter('all');
+  </script>
+</BaseBlogLayout>

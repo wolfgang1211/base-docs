@@ -1,0 +1,67 @@
+---
+title: "Introducing the Base Account SDK"
+description: "TL;DR The Base Account SDK is the next evolution of the Coinbase Wallet SDK. It delivers Sign in with Base and Base Pay, universal sign on and payments for the open internet. What is Base Account? Base Account is the..."
+publishedAt: 2025-07-16
+author: "Base Engineering Team"
+tags:
+  - wallets
+draft: false
+---
+
+import ImportedHtml from '../../components/ImportedHtml.astro';
+export const html = String.raw`<p>TL;DR The <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://github.com/base/account-sdk"><u>Base Account SDK</u></a> is the next evolution of the Coinbase Wallet SDK. It delivers Sign in with Base and Base Pay, universal sign on and payments for the open internet.&nbsp;&nbsp;&nbsp;</p><h2 id="h-what-is-base-account" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">What is Base Account?</h2><p>Base Account is the onchain account and identity layer powering the new Base app. Onchain, it’s built on our Smart Wallet platform and Basenames. Offchain, Base Account provides a private and secure place to store personal information like name, email, phone number, and shipping address for easy sharing with apps.&nbsp;</p><p>Every existing Coinbase Wallet user with a Smart Wallet has a Base Account on day one – over 185k accounts. Every new user of the Base app will be using Base Account by default. We will be sharing migration paths to Base Account for EOA users over the coming months: see our <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="http://docs.base.org/base-account/guides/migration-guide"><u>migration guide</u></a> to ensure all users can continue to use your app.&nbsp;&nbsp;</p><p>Users can manage their Base Account within the Base app or at <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="http://account.base.app">account.base.app</a>.</p><h2 id="h-whats-new-in-the-sdk" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">What’s New in the SDK?</h2><p>The Base Account SDK is streamlined and has new tools that make it easier than ever for builders to make amazing apps. All of our documentation can be found <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="http://docs.base.org/base-account/"><u>here</u></a>.</p><h3 id="h-pay" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Pay</h3><p>There is a new <code>pay</code> module in the SDK, with simple functions for onchain USDC payments.</p><pre data-type="codeBlock" text="import { pay } from '@base-org/account/pay'; 
+
+const payment = await pay({ amount: &quot;25.00&quot;, &quot;0xYourWalletAddressHere&quot; });
+
+const response = await getPaymentStatus({ transactionId: payment.transactionId });"><code>import { pay } from '@base-org/account/pay'<span class="hljs-comment">; </span>
+
+const <span class="hljs-attr">payment</span> = await pay({ amount: <span class="hljs-string">"25.00"</span>, <span class="hljs-string">"0xYourWalletAddressHere"</span> })<span class="hljs-comment">;</span>
+
+const <span class="hljs-attr">response</span> = await getPaymentStatus({ transactionId: payment.transactionId })<span class="hljs-comment">;</span></code></pre><h3 id="h-ui-components" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">UI Components</h3><p>The SDK now comes with UI Components for standardized buttons:</p><ul><li><p>“Sign in with Base” or “Base” for authentication contexts</p></li><li><p>“Base Pay” for payments contexts</p></li></ul><pre data-type="codeBlock" text="// Also available in Vue/Preact/Svelte
+import { BasePayButton, SignInWithBaseButton } from '@base-org/account-ui/react';
+
+function SignIn() {
+  return (
+    &lt;SignInWithBaseButton 
+      onClick={handleClick}
+      align=&quot;center&quot;
+      variant=&quot;solid&quot;
+      colorScheme=&quot;system&quot;
+    /&gt;
+  );
+}
+
+function PayComponent() {
+  return (
+    &lt;BasePayButton 
+      onClick={handlePay}
+      colorScheme=&quot;system&quot;
+    /&gt;
+  );
+}"><code><span class="hljs-comment">// Also available in Vue/Preact/Svelte</span>
+<span class="hljs-keyword">import</span> { <span class="hljs-title">BasePayButton</span>, <span class="hljs-title">SignInWithBaseButton</span> } <span class="hljs-title"><span class="hljs-keyword">from</span></span> <span class="hljs-string">'@base-org/account-ui/react'</span>;
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">SignIn</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">return</span> (
+    <span class="hljs-operator">&lt;</span>SignInWithBaseButton 
+      onClick<span class="hljs-operator">=</span>{handleClick}
+      align<span class="hljs-operator">=</span><span class="hljs-string">"center"</span>
+      variant<span class="hljs-operator">=</span><span class="hljs-string">"solid"</span>
+      colorScheme<span class="hljs-operator">=</span><span class="hljs-string">"system"</span>
+    <span class="hljs-operator">/</span><span class="hljs-operator">&gt;</span>
+  );
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">PayComponent</span>(<span class="hljs-params"></span>) </span>{
+  <span class="hljs-keyword">return</span> (
+    <span class="hljs-operator">&lt;</span>BasePayButton 
+      onClick<span class="hljs-operator">=</span>{handlePay}
+      colorScheme<span class="hljs-operator">=</span><span class="hljs-string">"system"</span>
+    <span class="hljs-operator">/</span><span class="hljs-operator">&gt;</span>
+  );
+}</code></pre><figure float="none" data-type="figure" class="img-center" style="max-width: null;"><img src="https://storage.googleapis.com/papyrus_images/a1faeda353ee03c9a1e0e9847b7baadf.png" blurdataurl="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAASCAIAAAC1qksFAAAACXBIWXMAAAsTAAALEwEAmpwYAAADVklEQVR4nJ2V72scRRjHB5uGe+2rBPtK8NIYGqFtfNMWSl5EBN/UN/aV/4ER8s53re9FX4lQWpGWntyPtCpWEszRrhetojapSdpet3fh7nZ39sc8Mzc7O7M/kj3ZO/tGUsh2eFiGGZgPz3zn+11ku/TAMjHJJh4bFXag27OwA8NdApQTyl1gLjDbJT0TP9/6f6EDVwlw23G5L6QKhZRChQTgWattYkKZDwBxHKfpYDSUUpZl2R7NAXCBSxVKGQkZSBllpULuC0I5ZVzX9dXVVV3XLctst1uUUqUUZfzAJl4ICIanx1HqMRpE4kmz9VRvUy6A8mPHXpt5cwYhdOSVIydmTiCEisWikNFhAdglBHwQxOp377fr3WDr4c7O6poWJ4kLnAAvFI7euH6r+MbxhYV3v75aRghNTEwIFeXsQEmX8c83Przz6MtbtTp2HBWGGYDy8fHxarl6fGrqnYWFUqmEEJqcnMwLYIGUSu39atS+uPGZ9mhlsDfgItOAQL9QKNTXfn5rdvb9Cxe+/+72SwKkjPqhuLZy/dv6NQi7UiZCSkI5ZB2MXb3yzXLt9sUPLro2IIQKhYKKkxwA22Nxkuy2za/KVz7dmf0dV0K1L6R0gfW5RMOxvfX08qXLH3/0yT+bm2/PzRHK8z3TQMnGX+t/6utb3spj+w+P21JGLjDK/LGxsRFjenpq+J0+deoksEMDsANAOe0zh9syUdnth4wEThju2R6lXCwuLp47d/7MmbOnT8/Nz88Xi1NLS0u+kPk02Njc1LT1vx9s3Gtod+9qjcZvu50usMwHQvSTJPrPx4NBmqZCcDi80bBLgfEf7vxUqS7f035Zq9fL5UqlWmu1d7OcoLzV8tptgXFomqFtx80mbG13KPfzdaA11n/MGLWbpVK1tlwuVyxsA8uiAp1/gFAdvdpAr99HRzWE6sX3HgopXsIHEigFyjySqeKLYCgyd53QNKNeLzAM3usFGMeERPmyyCP9NE263bDTcYGCYZi+L/bTNJOf+VLJOFGMMwfAY0xEIRUqhwYjH0Rx3Ofxk+az7Z3tx81mFqpxYnsMKN9PB3GSGiZu6rudniXjVMYpobkAGYMSSk3sdHuWYdlZ3D9P/OF/hhsm7hnYsOxRfrzonH8BJwWt8QP3x2gAAAAASUVORK5CYII=" nextheight="900" nextwidth="1600" class="image-node embed"><figcaption htmlattributes="[object Object]" class="hide-figcaption"></figcaption></figure><p>See our UI Component <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://docs.base.org/base-account/reference/ui-elements/sign-in-with-base-button"><u>documentation</u></a> for more info.&nbsp;</p><h3 id="h-sub-accounts" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Sub Accounts</h3><p>Sub accounts are live on mainnets in the new SDK. Sub Accounts have been live on testnet since February. They unlock seamless in-app transactions and allow users to aggregate and manage all of their app accounts on <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="http://account.base.app">account.base.app</a>. See our Sub Account <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://docs.base.org/base-account/improve-ux/sub-accounts"><u>documentation</u></a> for more info.&nbsp;</p><h2 id="h-our-vision" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Our Vision&nbsp;</h2><p>Our mission is to build a universal and self-sovereign account for the open internet. We want to provide users with an account <em>they </em>control and that works with them across all apps and chains.</p><p><br>We want the Base Account SDK to be the easiest way for developers to build onchain: connecting them to thousands of funded accounts, with quick and easy ways to request sharing of things like email and shipping address.&nbsp;</p><p>We’re just getting started, and there’s so much more to do: still day 1. We’re excited to build with you.</p>
+`;
+
+![Introducing the Base Account SDK](https://storage.googleapis.com/papyrus_images/c1bed3e6254d478fa404e4ed408f5aff.jpg)
+
+<ImportedHtml html={html} />

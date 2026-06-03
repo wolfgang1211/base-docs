@@ -17,6 +17,11 @@
 /.next/
 /out/
 
+# astro blog workspace
+/blog/.astro/
+/blog/dist/
+/blog/node_modules/
+
 # production
 /build
 

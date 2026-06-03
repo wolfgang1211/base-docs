@@ -1,0 +1,409 @@
+---
+title: "OnchainTestKit: A Framework for End-to-End Testing of Onchain Applications"
+description: "Making Onchain Application Testing Reliable and Straightforward"
+publishedAt: 2025-09-29
+author: "Base Engineering Team"
+tags:
+  - devx
+draft: false
+---
+
+import ImportedHtml from '../../components/ImportedHtml.astro';
+export const html = String.raw`<h2 id="h-introduction" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Introduction</h2><p>Testing decentralized applications has always been fundamentally different from testing traditional web applications. While conventional apps deal with straightforward HTTP requests and predictable database states, onchain apps must navigate the complex world of blockchain interactions: wallet connections, transaction approvals, network switches, and chain state. Each of these interactions introduces unique challenges that existing testing frameworks weren't designed to handle.</p><p><br>We encountered many of these challenges when writing end-to-end tests for the <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://www.coinbase.com/en-ca/blog/the-future-of-onchain-Liquidity-is-here-via-coinbase-verified-pools"><u>Verified Pools project</u></a>. This sophisticated DeFi application brought institutional-grade liquidity infrastructure to onchain markets, requiring testing of complex user flows across frontend, backend, and smart contract integrations. For example, a user connecting their wallet, approving token spending, signing Permit2 messages, providing liquidity to pools, and managing their positions across multiple contracts. What should have been a straightforward testing effort quickly became a weeks-long odyssey of technical challenges and productivity bottlenecks.</p><h2 id="h-the-core-challenges-of-e2e-onchain-testing" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">The Core Challenges of E2E Onchain Testing</h2><p>Testing decentralized applications introduces complexities that live at the intersection of web automation and blockchain interaction. Standard end-to-end testing frameworks are not inherently built for this environment, forcing developers to solve several fundamental problems before they can write effective tests.</p><p>Based on our experience, there are 4 major testing hurdles:</p><p><strong>1. Wallet Extension Setup</strong> Every test requires a browser wallet to be installed, configured, and funded from scratch. This process is unique for each wallet (like MetaMask or Coinbase Wallet) and can lead to brittle, custom scripts.</p><p><strong>2. Unpredictable Wallet Pop-ups</strong> During a test, user actions trigger wallet pop-ups for transaction approvals, message signing, and network switches. These pop-ups appear asynchronously with inconsistent timing and UI patterns, leading to unpredictability and flakiness.&nbsp;</p><p><strong>3. Shared On-Chain State</strong> True test parallelism is impossible on a shared blockchain. When multiple tests run at once, they use the same wallet addresses and interact with the same smart contracts on the same blockchain. This causes tests to interfere with each other's state, leading to unpredictable failures that are difficult to debug.</p><p><strong>4. Contract Deployment and State Management</strong> A fundamental tooling gap exists between smart contract development in Solidity (using Foundry) and end-to-end testing in TypeScript. Tests require contracts to be deployed with a specific initial state, but contract addresses are non-deterministic, which breaks the link with the frontend.</p><hr><h2 id="h-how-onchaintestkit-solves-each-problem" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">How OnchainTestKit Solves Each Problem</h2><p>OnchainTestKit directly addresses each of the four critical problems with purpose-built solutions:</p><h3 id="h-solution-1-automatic-wallet-management" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Solution 1: Automatic Wallet Management</h3><p>Instead of manually setting up each wallet type, OnchainTestKit handles everything automatically, with a unified interface that works for all wallet types. Here's an example of how to configure a test with Coinbase Wallet:</p><pre data-type="codeBlock" text="// Configure the test with a local node and a coinbase wallet
+const coinbaseWalletConfig = configure()
+&nbsp;&nbsp;.withLocalNode({
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;forkUrl: process.env.E2E_TEST_FORK_URL,
+&nbsp;&nbsp;&nbsp;&nbsp;forkBlockNumber: BigInt(process.env.E2E_TEST_FORK_BLOCK_NUMBER ?? &quot;0&quot;),
+&nbsp;&nbsp;&nbsp;&nbsp;hardfork: &quot;cancun&quot;,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withCoinbase()
+&nbsp;&nbsp;.withSeedPhrase({
+&nbsp;&nbsp;&nbsp;&nbsp;seedPhrase: DEFAULT_SEED_PHRASE ?? &quot;&quot;,
+&nbsp;&nbsp;&nbsp;&nbsp;password: DEFAULT_PASSWORD,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withNetwork({
+&nbsp;&nbsp;&nbsp;&nbsp;name: &quot;Base Sepolia&quot;,
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;symbol: &quot;ETH&quot;,
+&nbsp;&nbsp;&nbsp;&nbsp;rpcUrl: &quot;http://localhost:8545&quot;,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.build();"><code><span class="hljs-comment">// Configure the test with a local node and a coinbase wallet</span>
+const coinbaseWalletConfig <span class="hljs-operator">=</span> configure()
+&nbsp;&nbsp;.withLocalNode({
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;forkUrl: process.env.E2E_TEST_FORK_URL,
+&nbsp;&nbsp;&nbsp;&nbsp;forkBlockNumber: BigInt(process.env.E2E_TEST_FORK_BLOCK_NUMBER ?? <span class="hljs-string">"0"</span>),
+&nbsp;&nbsp;&nbsp;&nbsp;hardfork: <span class="hljs-string">"cancun"</span>,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withCoinbase()
+&nbsp;&nbsp;.withSeedPhrase({
+&nbsp;&nbsp;&nbsp;&nbsp;seedPhrase: DEFAULT_SEED_PHRASE ?? <span class="hljs-string">""</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;password: DEFAULT_PASSWORD,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withNetwork({
+&nbsp;&nbsp;&nbsp;&nbsp;name: <span class="hljs-string">"Base Sepolia"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;symbol: <span class="hljs-string">"ETH"</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;rpcUrl: <span class="hljs-string">"http://localhost:8545"</span>,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.build();</code></pre><p><strong>Result</strong>: Developer-friendly, wallet agnostic, and easy to use. We hide all the complexity of wallet setup and management from the developer.</p><br><h3 id="h-solution-2-reliable-wallet-popup-handling" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Solution 2: Reliable Wallet Popup Handling</h3><p>OnchainTestKit provides a unified interface that abstracts all popup complexity:</p><pre data-type="codeBlock" text="// Instead of dealing with timing and popup detection:
+await coinbaseWallet.handleAction(BaseActionType.CONNECT_TO_DAPP);
+await coinbaseWallet.handleAction(BaseActionType.HANDLE_TRANSACTION, {
+&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE
+});
+
+await coinbaseWallet.handleAction(BaseActionType.CHANGE_SPENDING_CAP, {
+&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE
+});"><code><span class="hljs-comment">// Instead of dealing with timing and popup detection:</span>
+await coinbaseWallet.handleAction(BaseActionType.CONNECT_TO_DAPP);
+await coinbaseWallet.handleAction(BaseActionType.HANDLE_TRANSACTION, {
+&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE
+});
+
+await coinbaseWallet.handleAction(BaseActionType.CHANGE_SPENDING_CAP, {
+&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE
+});</code></pre><p><strong>Intelligent Waiting Strategies &amp; Retries</strong>: OnchainTestKit uses smart waiting strategies that understand blockchain timing patterns and wallet behavior. Built-in retry mechanisms handle transient failures automatically, while adaptive timeouts adjust based on network conditions and popup complexity.</p><p><strong>Result</strong>: Tests pass reliably. No more flaky tests due to timing issues or unpredictable wallet behavior.</p><br><h3 id="h-solution-3-true-test-isolation" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Solution 3: True Test Isolation</h3><p>OnchainTestKit provides each test with its own isolated Anvil blockchain node, eliminating all state conflicts:</p><pre data-type="codeBlock" text="// Each test gets its own LocalNodeManager
+test('parallel test A', async ({ localNodeManager, smartContractManager }) =&gt; {
+&nbsp;&nbsp;// Automatically starts Anvil node on available port (e.g., 10543)
+&nbsp;&nbsp;// This test's transactions only affect its own blockchain
+&nbsp;&nbsp;await page.click('#swap-button');
+&nbsp;&nbsp;// Test logic...
+});
+
+test('parallel test B', async ({ localNodeManager, smartContractManager }) =&gt; {
+&nbsp;&nbsp;// Automatically starts separate Anvil node on different port (e.g., 10847)
+&nbsp;&nbsp;// Completely independent blockchain state
+&nbsp;&nbsp;await page.click('#approve-button');
+&nbsp;&nbsp;// Test logic...
+});"><code><span class="hljs-comment">// Each test gets its own LocalNodeManager</span>
+test(<span class="hljs-string">'parallel test A'</span>, async ({ localNodeManager, smartContractManager }) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+&nbsp;&nbsp;<span class="hljs-comment">// Automatically starts Anvil node on available port (e.g., 10543)</span>
+&nbsp;&nbsp;<span class="hljs-comment">// This test's transactions only affect its own blockchain</span>
+&nbsp;&nbsp;await page.click(<span class="hljs-string">'#swap-button'</span>);
+&nbsp;&nbsp;<span class="hljs-comment">// Test logic...</span>
+});
+
+test(<span class="hljs-string">'parallel test B'</span>, async ({ localNodeManager, smartContractManager }) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+&nbsp;&nbsp;<span class="hljs-comment">// Automatically starts separate Anvil node on different port (e.g., 10847)</span>
+&nbsp;&nbsp;<span class="hljs-comment">// Completely independent blockchain state</span>
+&nbsp;&nbsp;await page.click(<span class="hljs-string">'#approve-button'</span>);
+&nbsp;&nbsp;<span class="hljs-comment">// Test logic...</span>
+});</code></pre><p><strong>How LocalNodeManager Works</strong>: OnchainTestKit automatically allocates available ports across processes and spins up isolated Anvil nodes for each test. It supports three different parallel testing strategies:</p><p><strong>1. Fork Existing Networks</strong>: Fork a testnet or mainnet at a specific block number without deploying contracts. Perfect for testing against existing protocol deployments:</p><pre data-type="codeBlock" text=".withLocalNode({
+&nbsp;&nbsp;forkUrl: process.env.BASE_MAINNET_RPC_URL,
+&nbsp;&nbsp;forkBlockNumber: process.env.E2E_TEST_FORK_BLOCK_NUMBER,
+&nbsp;&nbsp;chainId: 8453
+})"><code>.withLocalNode({
+&nbsp;&nbsp;forkUrl: process.env.BASE_MAINNET_RPC_URL,
+&nbsp;&nbsp;forkBlockNumber: process.env.E2E_TEST_FORK_BLOCK_NUMBER,
+&nbsp;&nbsp;chainId: <span class="hljs-number">8453</span>
+})</code></pre><p><strong>2. Clean Local State</strong>: Start with a fresh blockchain and deploy all dependent contracts. Ideal for testing new protocols or complex state setups:</p><pre data-type="codeBlock" text=".withLocalNode({
+&nbsp;&nbsp;chainId: 84532,
+&nbsp;&nbsp;// No fork - starts with clean state
+})
+
+// Then deploy contracts via smartContractManager"><code>.withLocalNode({
+&nbsp;&nbsp;chainId: <span class="hljs-number">84532</span>,
+&nbsp;&nbsp;<span class="hljs-comment">// No fork - starts with clean state</span>
+})
+
+<span class="hljs-comment">// Then deploy contracts via smartContractManager</span></code></pre><p><strong>3. Hybrid Approach</strong>: Fork a network and deploy additional test contracts on top. Combines real protocol state with custom test contracts:</p><pre data-type="codeBlock" text=".withLocalNode({
+&nbsp;&nbsp;forkUrl: process.env.BASE_SEPOLIA_RPC_URL,
+&nbsp;&nbsp;forkBlockNumber: 10_000_000n,
+&nbsp;&nbsp;chainId: 84532
+})
+
+// Then deploy additional test contracts as needed"><code>.withLocalNode({
+&nbsp;&nbsp;forkUrl: process.env.BASE_SEPOLIA_RPC_URL,
+&nbsp;&nbsp;forkBlockNumber: 10_000_000n,
+&nbsp;&nbsp;chainId: <span class="hljs-number">84532</span>
+})
+
+<span class="hljs-comment">// Then deploy additional test contracts as needed</span></code></pre><p>Each approach provides complete test isolation with independent blockchain state, allowing tests to manipulate time, account balances, and contract state without affecting other tests.</p><p><strong>Smart RPC Routing</strong>: One of the key innovations is automatic request interception. Your frontend can always use a fixed RPC URL like <code>localhost:8545</code>, and LocalNodeManager automatically routes these requests to the correct Anvil node for each test. No need to dynamically configure different ports—the framework handles the routing transparently.</p><p><strong>Automatic Cleanup</strong>: LocalNodeManager handles the complete node lifecycle, gracefully terminating each Anvil process after its test completes. This ensures no resource leaks or port conflicts, even when running large test suites with dozens of parallel nodes.</p><p><strong>Result</strong>: Fully parallelized testing with no coordination overhead. CI times drop from hours to minutes.</p><br><h3 id="h-solution-4-deterministic-contract-deployments" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Solution 4: Deterministic Contract Deployments</h3><p>OnchainTestKit bridges the Solidity/TypeScript gap using CREATE2 for deterministic contract deployments:</p><pre data-type="codeBlock" text="await smartContractManager.setContractState({
+&nbsp;&nbsp;deployments: [
+&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name: 'MockUSDC',&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;salt: '0x1234...', // CREATE2 salt for deterministic address
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;deployer: admin,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;args: ['USD Coin', 'USDC', 6]&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;},
+&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name: 'DEXContract',&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;salt: '0x5678...',&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;deployer: admin,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;args: [mockUsdcAddress]&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;],
+&nbsp;&nbsp;calls: [
+&nbsp;&nbsp;&nbsp;&nbsp;{ target: mockUsdcAddress, functionName: 'mint', args: [user, amount], account: admin },
+&nbsp;&nbsp;&nbsp;&nbsp;{ target: mockUsdcAddress, functionName: 'approve', args: [dexAddress, amount], account: user }
+&nbsp;&nbsp;]
+});"><code>await smartContractManager.<span class="hljs-title function_ invoke__">setContractState</span>({
+<span class="hljs-attr">&nbsp;&nbsp;deployments</span>: [
+&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name</span>: <span class="hljs-string">'MockUSDC'</span>,&nbsp;
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;salt</span>: <span class="hljs-string">'0x1234...'</span>, // CREATE2 salt <span class="hljs-keyword">for</span> deterministic address
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;deployer</span>: admin,
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;args</span>: [<span class="hljs-string">'USD Coin'</span>, <span class="hljs-string">'USDC'</span>, <span class="hljs-number">6</span>]&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;},
+&nbsp;&nbsp;&nbsp;&nbsp;{&nbsp;
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;name</span>: <span class="hljs-string">'DEXContract'</span>,&nbsp;
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;salt</span>: <span class="hljs-string">'0x5678...'</span>,&nbsp;
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;deployer</span>: admin,
+<span class="hljs-attr">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;args</span>: [mockUsdcAddress]&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;],
+<span class="hljs-attr">&nbsp;&nbsp;calls</span>: [
+&nbsp;&nbsp;&nbsp;&nbsp;{ <span class="hljs-attr">target</span>: mockUsdcAddress, <span class="hljs-attr">functionName</span>: <span class="hljs-string">'mint'</span>, <span class="hljs-attr">args</span>: [user, amount], <span class="hljs-attr">account</span>: admin },
+&nbsp;&nbsp;&nbsp;&nbsp;{ <span class="hljs-attr">target</span>: mockUsdcAddress, <span class="hljs-attr">functionName</span>: <span class="hljs-string">'approve'</span>, <span class="hljs-attr">args</span>: [dexAddress, amount], <span class="hljs-attr">account</span>: user }
+&nbsp;&nbsp;]
+});</code></pre><br><p><strong>How CREATE2 Works</strong>: OnchainTestKit uses CREATE2 deployment with fixed salts to ensure contracts always deploy to the same addresses. The SmartContractManager predicts deployment addresses before deployment, checks if contracts already exist at those addresses, and loads Foundry artifacts automatically from your out/ artifact directory. This creates a seamless bridge between your Solidity contracts and TypeScript tests.</p><p><strong>Foundry Integration</strong>: Automatically loads compiled contract artifacts, eliminating manual ABI management or deployment script coordination between contract and test teams.</p><p><strong>Result</strong>: Reliable contract testing with predictable addresses. Full user journeys from smart contract interaction to UI feedback work consistently across all test runs.</p><hr><h2 id="h-how-we-use-onchaintestkit-in-verified-pools" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">How We Use OnchainTestKit in Verified Pools</h2><p>Here's a real example from our Verified Pools project showing how OnchainTestKit transforms complex onchain app testing into clean, readable tests:</p><pre data-type="codeBlock" text="// walletConfig/metamaskWalletConfig.ts
+import { baseSepolia } from 'viem/chains';
+import { configure } from '@coinbase/onchaintestkit';
+
+export const DEFAULT_PASSWORD = 'PASSWORD';
+export const DEFAULT_SEED_PHRASE = process.env.E2E_TEST_SEED_PHRASE;
+
+// Reusable configuration for MetaMask tests with Base Sepolia fork
+const metamaskConfig = configure()
+&nbsp;&nbsp;.withLocalNode({
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;forkUrl: process.env.E2E_TEST_FORK_URL,
+&nbsp;&nbsp;&nbsp;&nbsp;forkBlockNumber: BigInt(process.env.E2E_TEST_FORK_BLOCK_NUMBER ?? '0'),
+&nbsp;&nbsp;&nbsp;&nbsp;hardfork: 'cancun',
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withMetaMask()
+&nbsp;&nbsp;.withSeedPhrase({
+&nbsp;&nbsp;&nbsp;&nbsp;seedPhrase: DEFAULT_SEED_PHRASE ?? '',
+&nbsp;&nbsp;&nbsp;&nbsp;password: DEFAULT_PASSWORD,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withNetwork({
+&nbsp;&nbsp;&nbsp;&nbsp;name: 'Base Sepolia',
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;symbol: 'ETH',
+&nbsp;&nbsp;&nbsp;&nbsp;rpcUrl: 'http://localhost:8545', // Fixed URL, auto-routed to correct port
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.build();
+
+export { metamaskConfig };"><code><span class="hljs-comment">// walletConfig/metamaskWalletConfig.ts</span>
+<span class="hljs-keyword">import</span> { <span class="hljs-title">baseSepolia</span> } <span class="hljs-title"><span class="hljs-keyword">from</span></span> <span class="hljs-string">'viem/chains'</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title">configure</span> } <span class="hljs-title"><span class="hljs-keyword">from</span></span> <span class="hljs-string">'@coinbase/onchaintestkit'</span>;
+
+export const DEFAULT_PASSWORD <span class="hljs-operator">=</span> <span class="hljs-string">'PASSWORD'</span>;
+export const DEFAULT_SEED_PHRASE <span class="hljs-operator">=</span> process.env.E2E_TEST_SEED_PHRASE;
+
+<span class="hljs-comment">// Reusable configuration for MetaMask tests with Base Sepolia fork</span>
+const metamaskConfig <span class="hljs-operator">=</span> configure()
+&nbsp;&nbsp;.withLocalNode({
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;forkUrl: process.env.E2E_TEST_FORK_URL,
+&nbsp;&nbsp;&nbsp;&nbsp;forkBlockNumber: BigInt(process.env.E2E_TEST_FORK_BLOCK_NUMBER ?? <span class="hljs-string">'0'</span>),
+&nbsp;&nbsp;&nbsp;&nbsp;hardfork: <span class="hljs-string">'cancun'</span>,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withMetaMask()
+&nbsp;&nbsp;.withSeedPhrase({
+&nbsp;&nbsp;&nbsp;&nbsp;seedPhrase: DEFAULT_SEED_PHRASE ?? <span class="hljs-string">''</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;password: DEFAULT_PASSWORD,
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.withNetwork({
+&nbsp;&nbsp;&nbsp;&nbsp;name: <span class="hljs-string">'Base Sepolia'</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;chainId: baseSepolia.id,
+&nbsp;&nbsp;&nbsp;&nbsp;symbol: <span class="hljs-string">'ETH'</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;rpcUrl: <span class="hljs-string">'http://localhost:8545'</span>, <span class="hljs-comment">// Fixed URL, auto-routed to correct port</span>
+&nbsp;&nbsp;})
+&nbsp;&nbsp;.build();
+
+export { metamaskConfig };</code></pre><br><p>This test covers a complete user journey in Verified Pools:</p><ol><li><p>Connect MetaMask wallet to the onchain app</p></li><li><p>Navigate to the swap interface</p></li><li><p>Enter swap amount (0.0001 ETH)</p></li><li><p>Execute the swap transaction</p></li><li><p>Handle all required wallet popups (spending cap approval, Permit2 signature, transaction confirmation)</p></li><li><p>Verify the swap completed successfully<br></p></li></ol><pre data-type="codeBlock" text="// swap.spec.ts
+
+import { createOnchainTest } from '@coinbase/onchaintestkit';
+import { NotificationPageType } from '@coinbase/onchaintestkit/wallets/MetaMask';
+import { ActionApprovalType, BaseActionType } from '@coinbase/onchaintestkit/wallets/BaseWallet';
+import { metamaskConfig } from './walletConfig/metamaskWalletConfig';
+
+const test = createOnchainTest(metamaskConfig);
+const { expect } = test;
+
+test.describe('Verified Pools Swap', () =&gt; {
+&nbsp;&nbsp;test('connect wallet and swap @tx', async ({ page, metamask }) =&gt; {
+&nbsp;&nbsp;&nbsp;&nbsp;if (!metamask) throw new Error('MetaMask fixture is required');
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Navigate to swap interface
+&nbsp;&nbsp;&nbsp;&nbsp;await page.goto('/swap');
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Connect wallet - OnchainTestKit handles all the complexity
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByTestId('ockConnectButton').first().click();
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByTestId('ockModalOverlay')
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.first()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.getByRole('button', { name: 'MetaMask' })
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.click();
+&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.CONNECT_TO_DAPP);
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByRole('button', { name: /^Accept$/ }).click();
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Set up the swap
+&nbsp;&nbsp;&nbsp;&nbsp;const inputField = page.locator('input[placeholder=&quot;0.0&quot;]').first();
+&nbsp;&nbsp;&nbsp;&nbsp;await inputField.fill('0.0001');
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Execute swap
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByRole('button', { name: 'Swap' }).click();
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByRole('button', { name: 'Confirm' }).click();
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Handle spending cap approval (Permit2)
+&nbsp;&nbsp;&nbsp;&nbsp;let notificationType = await metamask.identifyNotificationType();
+&nbsp;&nbsp;&nbsp;&nbsp;if (notificationType === NotificationPageType.SpendingCap) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.CHANGE_SPENDING_CAP, {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;notificationType = await metamask.identifyNotificationType();
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Handle signature for Permit2
+&nbsp;&nbsp;&nbsp;&nbsp;if (notificationType === NotificationPageType.SpendingCap) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.HANDLE_SIGNATURE, {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;notificationType = await metamask.identifyNotificationType();
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Handle the actual swap transaction
+&nbsp;&nbsp;&nbsp;&nbsp;if (notificationType === NotificationPageType.Transaction) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.HANDLE_TRANSACTION, {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;// Verify swap completion
+&nbsp;&nbsp;&nbsp;&nbsp;await expect(page.getByRole('link', { name: 'View on Explorer' })).toBeVisible({
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;timeout: 10_000,
+&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;});
+});
+"><code><span class="hljs-comment">// swap.spec.ts</span>
+
+<span class="hljs-keyword">import</span> { <span class="hljs-title">createOnchainTest</span> } <span class="hljs-title"><span class="hljs-keyword">from</span></span> <span class="hljs-string">'@coinbase/onchaintestkit'</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title">NotificationPageType</span> } <span class="hljs-title"><span class="hljs-keyword">from</span></span> <span class="hljs-string">'@coinbase/onchaintestkit/wallets/MetaMask'</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title">ActionApprovalType</span>, <span class="hljs-title">BaseActionType</span> } <span class="hljs-title"><span class="hljs-keyword">from</span></span> <span class="hljs-string">'@coinbase/onchaintestkit/wallets/BaseWallet'</span>;
+<span class="hljs-keyword">import</span> { <span class="hljs-title">metamaskConfig</span> } <span class="hljs-title"><span class="hljs-keyword">from</span></span> <span class="hljs-string">'./walletConfig/metamaskWalletConfig'</span>;
+
+const test <span class="hljs-operator">=</span> createOnchainTest(metamaskConfig);
+const { expect } <span class="hljs-operator">=</span> test;
+
+test.describe(<span class="hljs-string">'Verified Pools Swap'</span>, () <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+&nbsp;&nbsp;test(<span class="hljs-string">'connect wallet and swap @tx'</span>, async ({ page, metamask }) <span class="hljs-operator">=</span><span class="hljs-operator">&gt;</span> {
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span> (<span class="hljs-operator">!</span>metamask) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-built_in">Error</span>(<span class="hljs-string">'MetaMask fixture is required'</span>);
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Navigate to swap interface</span>
+&nbsp;&nbsp;&nbsp;&nbsp;await page.goto(<span class="hljs-string">'/swap'</span>);
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Connect wallet - OnchainTestKit handles all the complexity</span>
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByTestId(<span class="hljs-string">'ockConnectButton'</span>).first().click();
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByTestId(<span class="hljs-string">'ockModalOverlay'</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.first()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.getByRole(<span class="hljs-string">'button'</span>, { name: <span class="hljs-string">'MetaMask'</span> })
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.click();
+&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.CONNECT_TO_DAPP);
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByRole(<span class="hljs-string">'button'</span>, { name: <span class="hljs-operator">/</span><span class="hljs-operator">^</span>Accept$<span class="hljs-operator">/</span> }).click();
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Set up the swap</span>
+&nbsp;&nbsp;&nbsp;&nbsp;const inputField <span class="hljs-operator">=</span> page.locator(<span class="hljs-string">'input[placeholder="0.0"]'</span>).first();
+&nbsp;&nbsp;&nbsp;&nbsp;await inputField.fill(<span class="hljs-string">'0.0001'</span>);
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Execute swap</span>
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByRole(<span class="hljs-string">'button'</span>, { name: <span class="hljs-string">'Swap'</span> }).click();
+&nbsp;&nbsp;&nbsp;&nbsp;await page.getByRole(<span class="hljs-string">'button'</span>, { name: <span class="hljs-string">'Confirm'</span> }).click();
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Handle spending cap approval (Permit2)</span>
+&nbsp;&nbsp;&nbsp;&nbsp;let notificationType <span class="hljs-operator">=</span> await metamask.identifyNotificationType();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span> (notificationType <span class="hljs-operator">=</span><span class="hljs-operator">=</span><span class="hljs-operator">=</span> NotificationPageType.SpendingCap) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.CHANGE_SPENDING_CAP, {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;notificationType <span class="hljs-operator">=</span> await metamask.identifyNotificationType();
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Handle signature for Permit2</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span> (notificationType <span class="hljs-operator">=</span><span class="hljs-operator">=</span><span class="hljs-operator">=</span> NotificationPageType.SpendingCap) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.HANDLE_SIGNATURE, {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;notificationType <span class="hljs-operator">=</span> await metamask.identifyNotificationType();
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Handle the actual swap transaction</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span> (notificationType <span class="hljs-operator">=</span><span class="hljs-operator">=</span><span class="hljs-operator">=</span> NotificationPageType.Transaction) {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;await metamask.handleAction(BaseActionType.HANDLE_TRANSACTION, {
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;approvalType: ActionApprovalType.APPROVE,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;&nbsp;&nbsp;}
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">// Verify swap completion</span>
+&nbsp;&nbsp;&nbsp;&nbsp;await expect(page.getByRole(<span class="hljs-string">'link'</span>, { name: <span class="hljs-string">'View on Explorer'</span> })).toBeVisible({
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;timeout: <span class="hljs-number">10_000</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;});
+&nbsp;&nbsp;});
+});
+</code></pre><p><strong>What This Shows:</strong></p><ul><li><p><strong>No Custom Wallet Setup</strong>: OnchainTestKit handles MetaMask installation and configuration automatically</p></li><li><p><strong>Fork Testing</strong>: Tests run against real Base Sepolia network at a specific block number where all dependent contracts are deployed, but each test gets its own isolated fork</p></li><li><p><strong>Reliable Popup Handling</strong>: Complex wallet interactions reduced to simple handleAction calls</p></li><li><p><strong>Smart RPC Routing</strong>: Frontend uses fixed <code>localhost:8545</code>, framework routes to correct test node</p></li><li><p><strong>Automatic Cleanup</strong>: No manual resource management needed</p></li></ul><p>This same test would have required hundreds of lines of custom wallet automation code before OnchainTestKit. Now it's clean, readable, and maintainable.</p><br><h3 id="h-production-cicd-with-onchaintestkit" class="text-2xl font-header !mt-6 !mb-4 first:!mt-0 first:!mb-0">Production CI/CD with OnchainTestKit</h3><p>Here's how we run these tests at scale in our Verified Pools CI pipeline:</p><pre data-type="codeBlock" text="# .github/workflows/playwright.yml
+
+jobs:
+&nbsp;&nbsp;e2e-tests:
+&nbsp;&nbsp;&nbsp;&nbsp;# additional setup steps omitted for brevity
+&nbsp;&nbsp;&nbsp;&nbsp;# Install xvfb for headless browser testing
+
+&nbsp;&nbsp;&nbsp;&nbsp;- name: Install xvfb
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: |
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sudo apt-get update
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sudo apt-get install -y xvfb
+
+&nbsp;&nbsp;&nbsp;&nbsp;- name: Install dependencies
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn install --frozen-lockfile
+
+&nbsp;&nbsp;&nbsp;&nbsp;- name: Install Playwright Browsers
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn playwright install --with-deps
+
+&nbsp;&nbsp;&nbsp;&nbsp;- name: Build application
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn build
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;env:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NEXT_PUBLIC_BASE_SEPOLIA_RPC_URLS: http://localhost:8545
+
+&nbsp;&nbsp;&nbsp;&nbsp;- name: Prepare MetaMask Extension
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn e2e:metamask:prepare
+
+&nbsp;&nbsp;&nbsp;&nbsp;# Run transaction tests in parallel with 10 workers
+&nbsp;&nbsp;&nbsp;&nbsp;- name: Run Playwright TX tests with xvfb
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: xvfb-run --auto-servernum --server-args=&quot;-screen 0 1280x960x24&quot; yarn playwright test --workers=10 --reporter=list,github
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;env:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;E2E_TEST_SEED_PHRASE: \${{ secrets.E2E_TEST_SEED_PHRASE }}"><code># .github/workflows<span class="hljs-operator">/</span>playwright.yml
+
+jobs:
+&nbsp;&nbsp;e2e<span class="hljs-operator">-</span>tests:
+&nbsp;&nbsp;&nbsp;&nbsp;# additional setup steps omitted <span class="hljs-keyword">for</span> brevity
+&nbsp;&nbsp;&nbsp;&nbsp;# Install xvfb <span class="hljs-keyword">for</span> headless browser testing
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-operator">-</span> name: Install xvfb
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: <span class="hljs-operator">|</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sudo apt<span class="hljs-operator">-</span>get update
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;sudo apt<span class="hljs-operator">-</span>get install <span class="hljs-operator">-</span>y xvfb
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-operator">-</span> name: Install dependencies
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn install <span class="hljs-operator">-</span><span class="hljs-operator">-</span>frozen<span class="hljs-operator">-</span>lockfile
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-operator">-</span> name: Install Playwright Browsers
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn playwright install <span class="hljs-operator">-</span><span class="hljs-operator">-</span>with<span class="hljs-operator">-</span>deps
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-operator">-</span> name: Build application
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn build
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;env:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NEXT_PUBLIC_BASE_SEPOLIA_RPC_URLS: http:<span class="hljs-comment">//localhost:8545</span>
+
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-operator">-</span> name: Prepare MetaMask Extension
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: yarn e2e:metamask:prepare
+
+&nbsp;&nbsp;&nbsp;&nbsp;# Run transaction tests in parallel with <span class="hljs-number">10</span> workers
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-operator">-</span> name: Run Playwright TX tests with xvfb
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;run: xvfb<span class="hljs-operator">-</span>run <span class="hljs-operator">-</span><span class="hljs-operator">-</span>auto<span class="hljs-operator">-</span>servernum <span class="hljs-operator">-</span><span class="hljs-operator">-</span>server<span class="hljs-operator">-</span>args<span class="hljs-operator">=</span><span class="hljs-string">"-screen 0 1280x960x24"</span> yarn playwright test <span class="hljs-operator">-</span><span class="hljs-operator">-</span>workers<span class="hljs-operator">=</span><span class="hljs-number">10</span> <span class="hljs-operator">-</span><span class="hljs-operator">-</span>reporter<span class="hljs-operator">=</span>list,github
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;env:
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;E2E_TEST_SEED_PHRASE: \${{ secrets.E2E_TEST_SEED_PHRASE }}</code></pre><br><p><strong>Key Production Features:</strong></p><ul><li><p><strong>Parallel Execution</strong>: --workers=10 runs 10 tests simultaneously, each with isolated blockchain nodes</p></li><li><p><strong>Environment Isolation</strong>: Each test gets its own fork of Base Sepolia without conflicts</p></li><li><p><strong>Robust CI Setup</strong>: Handles headless browser automation with xvfb and proper cleanup</p></li></ul><p><strong>Results</strong>: Our CI runs 100+ comprehensive onchain app tests in parallel in under 10 minutes.</p><hr><h2 id="h-try-onchaintestkit-today" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Try OnchainTestKit Today</h2><p>OnchainTestKit is available now and has been published to NPM. To get started, check out the documentation and examples in the <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://github.com/coinbase/onchaintestkit"><u>GitHub repository</u></a>.</p><h2 id="h-interested-in-improving-onchain-developer-experience" class="text-3xl font-header !mt-8 !mb-4 first:!mt-0 first:!mb-0">Interested in Improving Onchain Developer Experience?</h2><p>If increasing the impact of onchain developers piques your interest, please know that our Onchain DevX team would love to meet you! <a target="_blank" rel="noopener noreferrer nofollow ugc" class="dont-break-out" href="https://www.coinbase.com/careers/positions/7081419">We're Hiring</a>.</p>
+`;
+
+![OnchainTestKit: A Framework for End-to-End Testing of Onchain Applications](https://storage.googleapis.com/papyrus_images/0d74024a994a89e6c2a5d129aacc313de32018e4240f5e7137b32793441ba328.jpg)
+
+<ImportedHtml html={html} />
