@@ -249,6 +249,14 @@
                 "group": "Upgrades",
                 "pages": [
                   {
+                    "group": "Beryl",
+                    "pages": [
+                      "base-chain/specs/upgrades/beryl/overview",
+                      "base-chain/specs/upgrades/beryl/b20",
+                      "base-chain/specs/upgrades/beryl/reth-v2"
+                    ]
+                  },
+                  {
                     "group": "Azul",
                     "pages": [
                       "base-chain/specs/upgrades/azul/overview",
