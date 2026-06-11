@@ -1,0 +1,292 @@
+---
+title: "Launch a B20 Token"
+description: "Create and configure a B20 token on Base with a single factory call, then build and test a Checkout contract that accepts B20 payments with on-chain order memos."
+---
+
+B20 is an ERC-20 superset that runs as a native [precompile](/base-chain/specs/reference/glossary#precompiled-contract-precompile) on Base. You don't write or deploy a token contract. Instead, you ask the singleton [B20 Factory](https://github.com/base/base-std/blob/main/src/interfaces/IB20Factory.sol) to create one, fully configured, in a single transaction.
+
+This tutorial is for Solidity developers who are comfortable with ERC-20 tokens and Foundry. It takes about 15 minutes, and by the end you will have:
+
+- Created a B20 Asset token, with roles and a supply cap, in one factory call
+- Minted supply to a holder
+- Written a `Checkout` contract that accepts B20 payments tagged with on-chain order memos
+- Tested the integration locally against the shipped mock precompiles
+
+## Why B20 instead of a vanilla ERC-20
+
+With a vanilla ERC-20, you write (or fork) a token contract, audit it, deploy it, and add access control, pausing, and compliance hooks yourself.
+
+With B20, that logic is part of the chain. Every token the factory creates runs the same native implementation, with roles, supply cap, pause, policy gating, memos, and `permit` built in. It keeps full ERC-20 selector parity, so existing tooling works unchanged. See the [B20 overview](/base-chain/specs/upgrades/beryl/b20) for the full feature set.
+
+## Before you begin
+
+You need:
+
+- [Foundry](https://getfoundry.sh) installed (`forge` and `cast`)
+- An RPC endpoint for a Base chain that hosts the B20 precompiles (`{{RPC_URL}}` in the commands below)
+- A funded deployer account (`{{DEPLOYER_PRIVATE_KEY}}`)
+- Addresses to act as token admin and minter (`{{ADMIN_ADDRESS}}`, `{{MINTER_ADDRESS}}`); one account can play both roles while you experiment
+
+## Set up your project
+
+Create a [Foundry](https://getfoundry.sh) project and install the Base Standard Library (`base-std`) for the precompile interfaces and encoding helpers:
+
+```bash
+forge init b20-quickstart && cd b20-quickstart
+forge install base/base-std
+```
+
+Add the remappings to `foundry.toml`:
+
+```toml foundry.toml
+remappings = [
+    "base-std/=lib/base-std/src/",
+    "base-std-test/=lib/base-std/test/",
+]
+```
+
+The interfaces are compatible with any Solidity compiler `>=0.8.20 <0.9.0`.
+
+## Create your token
+
+The factory's single entry point is [`createB20`](https://github.com/base/base-std/blob/main/src/interfaces/IB20Factory.sol):
+
+- `variant`: `ASSET` or `STABLECOIN`. This guide uses `ASSET`.
+- `salt`: caller-chosen entropy that fixes the deterministic token address.
+- `params`: ABI-encoded name, symbol, initial admin, and decimals.
+- `initCalls`: optional batch of config calls applied to the token at creation.
+
+See the [Factory docs](https://github.com/base/base-std/blob/main/docs/B20/Factory.md) for the full parameter reference and `initCalls` bootstrap rules.
+
+Use [`B20FactoryLib`](https://github.com/base/base-std/blob/main/src/lib/B20FactoryLib.sol) to encode `params` and `initCalls`. Create `script/CreateToken.s.sol`:
+
+```solidity script/CreateToken.s.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {Script, console} from "forge-std/Script.sol";
+
+import {B20Constants} from "base-std/lib/B20Constants.sol";
+import {B20FactoryLib} from "base-std/lib/B20FactoryLib.sol";
+import {IB20Factory} from "base-std/interfaces/IB20Factory.sol";
+import {StdPrecompiles} from "base-std/StdPrecompiles.sol";
+
+contract CreateToken is Script {
+    function run() external returns (address token) {
+        address admin = vm.envAddress("TOKEN_ADMIN");
+        address minter = vm.envAddress("TOKEN_MINTER");
+        bytes32 salt = keccak256("my-first-b20");
+
+        // Name, symbol, initial DEFAULT_ADMIN_ROLE holder, decimals.
+        bytes memory params = B20FactoryLib.encodeAssetCreateParams("My Token", "MYT", admin, 18);
+
+        // Configuration applied atomically at creation.
+        bytes[] memory initCalls = new bytes[](2);
+        initCalls[0] = B20FactoryLib.encodeGrantRole(B20Constants.MINT_ROLE, minter);
+        initCalls[1] = B20FactoryLib.encodeUpdateSupplyCap(1_000_000e18);
+
+        vm.startBroadcast();
+        token = StdPrecompiles.B20_FACTORY.createB20(IB20Factory.B20Variant.ASSET, salt, params, initCalls);
+        vm.stopBroadcast();
+
+        console.log("B20 token created at:", token);
+    }
+}
+```
+
+Run it:
+
+```bash
+TOKEN_ADMIN={{ADMIN_ADDRESS}} TOKEN_MINTER={{MINTER_ADDRESS}} \
+  forge script script/CreateToken.s.sol \
+  --rpc-url {{RPC_URL}} --private-key {{DEPLOYER_PRIVATE_KEY}} --broadcast
+```
+
+On success the script logs the new token's address. Note the recognizable `0xB20f…` prefix:
+
+```
+== Logs ==
+  B20 token created at: 0xB20F...
+```
+
+The token now exists at a deterministic address. `admin` holds `DEFAULT_ADMIN_ROLE`, `minter` holds `MINT_ROLE`, and supply is capped at 1,000,000 tokens. You can also predict the address before creating it, to wire it into other contracts ahead of time:
+
+```solidity
+address predicted = StdPrecompiles.B20_FACTORY.getB20Address(IB20Factory.B20Variant.ASSET, deployer, salt);
+```
+
+<Warning>
+Always use the `B20FactoryLib` encoders. The native implementation rejects non-canonical calldata with `AbiDecodeFailed`. The helpers guarantee canonical encoding.
+</Warning>
+
+<Note>
+Asset decimals are fixed at creation and must be in `[6, 18]`. The supply cap is optional and defaults to no cap (the sentinel `type(uint256).max`). See [Supply cap](/base-chain/specs/upgrades/beryl/b20#supply-cap) and [Asset](/base-chain/specs/upgrades/beryl/b20#asset).
+</Note>
+
+<Note>
+`initCalls` run with bootstrap privileges, but the bypass is not total: `MINT_RECEIVER_POLICY` is always enforced, and pause is never bypassed. See the [Factory docs](https://github.com/base/base-std/blob/main/docs/B20/Factory.md#initcalls) before bundling mints or restrictive policies.
+</Note>
+
+## Mint your first tokens
+
+Minting is gated by `MINT_ROLE`, which the `initCalls` above granted to your minter account:
+
+```bash
+cast send {{TOKEN_ADDRESS}} "mint(address,uint256)" {{RECIPIENT_ADDRESS}} 1000e18 \
+  --rpc-url {{RPC_URL}} --private-key {{MINTER_PRIVATE_KEY}}
+```
+
+`cast send` prints a receipt with `status 1 (success)`. Confirm the balance landed:
+
+```bash
+cast call {{TOKEN_ADDRESS}} "balanceOf(address)(uint256)" {{RECIPIENT_ADDRESS}} --rpc-url {{RPC_URL}}
+# 1000000000000000000000 [1e21]
+```
+
+Memos are optional. Plain `mint` issues supply with no memo. For an off-chain reference, `mintWithMemo(to, amount, memo)` attaches a `bytes32` payload and emits a `Memo` event indexers can read. See [Memos](/base-chain/specs/upgrades/beryl/b20#memos).
+
+## Accept B20 payments in your own contract
+
+To integrate a B20 token, hold an [`IB20`](https://github.com/base/base-std/blob/main/src/interfaces/IB20.sol) reference and call its ERC-20 surface plus a few B20 payment extensions. The `Checkout` contract below accepts payment for an order. It opts in to memos: every payment is tagged with the order ID. Your backend then matches payments to orders by reading events, not by reconciling raw transfers.
+
+Create `src/Checkout.sol`:
+
+```solidity src/Checkout.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {IB20} from "base-std/interfaces/IB20.sol";
+
+/// @notice Accepts B20 token payments for orders, tagging each payment
+///         with its order ID as an on-chain memo.
+contract Checkout {
+    event PaymentReceived(bytes32 indexed orderId, address indexed payer, uint256 amount);
+
+    error ZeroAmount();
+
+    IB20 public immutable token;
+    address public immutable merchant;
+
+    constructor(IB20 token_, address merchant_) {
+        token = token_;
+        merchant = merchant_;
+    }
+
+    /// @notice Pays `amount` for `orderId`. The payer must have approved
+    ///         this contract on the token first.
+    function pay(bytes32 orderId, uint256 amount) public {
+        if (amount == 0) revert ZeroAmount();
+        token.transferFromWithMemo(msg.sender, merchant, amount, orderId);
+        emit PaymentReceived(orderId, msg.sender, amount);
+    }
+
+    /// @notice Approves and pays in a single transaction using an
+    ///         ERC-2612 permit signature from the payer.
+    function payWithPermit(bytes32 orderId, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+    {
+        token.permit(msg.sender, address(this), amount, deadline, v, r, s);
+        pay(orderId, amount);
+    }
+}
+```
+
+Three B20 features are doing the work here:
+
+- `transferFromWithMemo` is the optional memo variant of `transferFrom`. It transfers identically, then emits a `Memo(caller, orderId)` event right after the `Transfer` event. See [Memos](/base-chain/specs/upgrades/beryl/b20#memos).
+- `permit` lets the payer sign an approval off-chain, collapsing approve-then-pay into one transaction. See [ERC-2612 Permit](/base-chain/specs/upgrades/beryl/b20#erc-2612-permit--eip-712).
+- B20 transfers either succeed and return `true` or revert with a typed error (`InsufficientBalance`, `PolicyForbids`, `ContractPaused`, …). There is no `false` return to check.
+
+<Warning>
+A B20 transfer can revert for reasons a vanilla ERC-20 never hits: a transfer policy denies one of the parties, or the `TRANSFER` feature is paused. Balance and allowance alone don't guarantee success. Let the typed revert bubble up to the caller.
+</Warning>
+
+## Test the integration
+
+The library ships mock precompiles and test bases, so tests run locally with no fork. Inheriting [`B20FactoryTest`](https://github.com/base/base-std/blob/main/test/lib/B20FactoryTest.sol) etches the mocks and gives you param-builder and create helpers. Create `test/Checkout.t.sol`:
+
+```solidity test/Checkout.t.sol
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import {B20FactoryTest} from "base-std-test/lib/B20FactoryTest.sol";
+import {B20Constants} from "base-std/lib/B20Constants.sol";
+import {B20FactoryLib} from "base-std/lib/B20FactoryLib.sol";
+import {IB20} from "base-std/interfaces/IB20.sol";
+
+import {Checkout} from "../src/Checkout.sol";
+
+contract CheckoutTest is B20FactoryTest {
+    IB20 internal token;
+    Checkout internal checkout;
+    address internal merchant = makeAddr("merchant");
+
+    function setUp() public override {
+        super.setUp(); // etches the precompile mocks
+
+        bytes[] memory initCalls = new bytes[](1);
+        initCalls[0] = B20FactoryLib.encodeGrantRole(B20Constants.MINT_ROLE, admin);
+
+        token = IB20(
+            _createAsset(admin, keccak256("checkout-token"), _assetParams("My Token", "MYT", admin, 18), initCalls)
+        );
+        checkout = new Checkout(token, merchant);
+
+        vm.prank(admin);
+        token.mint(alice, 1_000e18);
+    }
+
+    function test_pay_transfersToMerchantAndEmitsMemo() public {
+        bytes32 orderId = keccak256("order-42");
+
+        vm.startPrank(alice);
+        token.approve(address(checkout), 100e18);
+
+        vm.expectEmit(address(token));
+        emit IB20.Memo(address(checkout), orderId);
+        vm.expectEmit(address(checkout));
+        emit Checkout.PaymentReceived(orderId, alice, 100e18);
+        checkout.pay(orderId, 100e18);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(merchant), 100e18, "merchant should receive payment");
+    }
+}
+```
+
+```bash
+forge test
+```
+
+You should see the test pass:
+
+```
+Ran 1 test for test/Checkout.t.sol:CheckoutTest
+[PASS] test_pay_transfersToMerchantAndEmitsMemo() (gas: 73937)
+Suite result: ok. 1 passed; 0 failed; 0 skipped
+```
+
+To run the same tests against the live implementations, fork a chain that hosts them:
+
+```bash
+LIVE_PRECOMPILES=true FOUNDRY_PROFILE=fork forge test --fork-url https://rpc.vibes.base.org/
+```
+
+## What you built
+
+You created a B20 Asset token with a single `createB20` call. The `initCalls` batch configured its admin, minter, and supply cap atomically. You then minted supply and integrated the token from your own contract. You used `transferFromWithMemo` for on-chain payment references and `permit` for single-transaction payments. You verified the flow locally against mock precompiles. You can re-run the same tests against the live implementations on a fork.
+
+## Next steps
+
+Your token is live but fully open: out of the box, B20 enforces no transfer restrictions.
+
+<Warning>
+Every policy scope defaults to `ALWAYS_ALLOW` at creation. If you need allowlists, blocklists, or KYC gating, you must configure policies explicitly, ideally in `initCalls` so the token is never live unconstrained.
+</Warning>
+
+- Gate transfers and mints with PolicyRegistry policies on the four policy scopes: [Policy integration](/base-chain/specs/upgrades/beryl/b20#policy-integration).
+- Pause in an incident with granular per-feature pause (`TRANSFER`, `MINT`, `BURN`) and separate pause and unpause roles: [Pause](/base-chain/specs/upgrades/beryl/b20#pause).
+- Manage roles, including the one-way `renounceLastAdmin()` path to an admin-less token: [Roles model](/base-chain/specs/upgrades/beryl/b20#roles-model).
+- Rebase with multipliers, batch-mint, announce, and attach extra metadata on the Asset variant: [Asset](/base-chain/specs/upgrades/beryl/b20#asset).
+- Issue a stablecoin with fixed 6 decimals and an immutable currency code: [Stablecoin](/base-chain/specs/upgrades/beryl/b20#stablecoin).
+- Predict and verify addresses with `getB20Address`, `isB20`, and `isB20Initialized`: [Factory](https://github.com/base/base-std/blob/main/docs/B20/Factory.md#b20-address-derivation).
